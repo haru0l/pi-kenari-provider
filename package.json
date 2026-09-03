@@ -34,8 +34,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run check && npm run build"
-  }
-  "pi": {
+  },
     "extensions": [
       "./dist/index.js"
     ]
