@@ -16,8 +16,9 @@
  */
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { BASE_URL_KENARI, PROVIDER_KENARI } from "./constants.js";
-import { getKenariBaselineModels, toKenariModels, fetchKenariModels, } from "./models.js";
+import { fetchKenariModels, getKenariBaselineModels, refreshKenariModels, } from "./models.js";
 let compatPromise;
+/** Single-flight dynamic import; failures are not cached so a later stream can retry. */
 function loadPiAiCompat() {
     if (!compatPromise) {
         compatPromise = import("@earendil-works/pi-ai/compat")
@@ -29,32 +30,25 @@ function loadPiAiCompat() {
     }
     return compatPromise;
 }
-function createStreamErrorEvent(model, error) {
-    const stream = createAssistantMessageEventStream();
-    stream.push({
-        type: "error",
-        reason: "error",
-        error: {
-            role: "assistant",
-            content: [],
-            api: model.api,
-            provider: model.provider,
-            model: model.id,
-            usage: {
-                input: 0,
-                output: 0,
-                cacheRead: 0,
-                cacheWrite: 0,
-                totalTokens: 0,
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-            },
-            stopReason: "error",
-            errorMessage: error instanceof Error ? error.message : String(error),
-            timestamp: Date.now(),
+function createStreamErrorEvent(model, options, error) {
+    return {
+        role: "assistant",
+        content: [],
+        api: model.api,
+        provider: model.provider,
+        model: model.id,
+        usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
         },
-    });
-    stream.end();
-    return stream;
+        stopReason: options?.signal?.aborted ? "aborted" : "error",
+        errorMessage: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+    };
 }
 /** Stream function that delegates to the compat OpenAI completions API. */
 function kenariStreamSimple(model, context, options) {
@@ -62,7 +56,9 @@ function kenariStreamSimple(model, context, options) {
     void (async () => {
         try {
             const compat = await loadPiAiCompat();
-            const inner = compat.openAICompletionsApi().streamSimple(model, context, options);
+            const inner = compat
+                .openAICompletionsApi()
+                .streamSimple(model, context, options);
             for await (const event of inner)
                 outer.push(event);
             if (typeof inner.result === "function") {
@@ -73,10 +69,12 @@ function kenariStreamSimple(model, context, options) {
             }
         }
         catch (error) {
-            const errorStream = createStreamErrorEvent(model, error);
-            for await (const event of errorStream)
-                outer.push(event);
-            outer.end();
+            const message = createStreamErrorEvent(model, options, error);
+            outer.push({
+                type: "error",
+                reason: message.stopReason,
+                error: message,
+            });
         }
     })();
     return outer;
@@ -98,6 +96,7 @@ function toProviderModelConfigs(models) {
         contextWindow: m.contextWindow,
         maxTokens: m.maxTokens,
         samplingParams: m.samplingParams,
+        compat: m.compat,
         headers: m.headers,
     }));
 }
@@ -114,33 +113,34 @@ export default function (pi) {
         authHeader: true,
         models: baselineConfigs,
         streamSimple: kenariStreamSimple,
+        // API-key login so /login kenari stores the key for later sessions.
+        oauth: {
+            name: "kenari API key",
+            login: async (callbacks) => {
+                const key = await callbacks.onPrompt({
+                    message: "Enter kenari API key (kn-...)",
+                });
+                if (!key?.trim())
+                    throw new Error("kenari login cancelled: no API key entered");
+                return {
+                    refresh: key.trim(),
+                    access: key.trim(),
+                    expires: Number.MAX_SAFE_INTEGER,
+                };
+            },
+            refreshToken: async (credentials) => credentials,
+            getApiKey: (credentials) => credentials.access,
+        },
         refreshModels: async (context) => {
-            if (!context.allowNetwork)
-                return [];
-            try {
-                const apiModels = await fetchKenariModels(context.signal);
-                const models = toKenariModels(apiModels);
-                const configs = toProviderModelConfigs(models);
-                if (configs.length > 0 && context.publish) {
-                    await context.publish({
-                        persist: {
-                            models: configs,
-                            checkedAt: Date.now(),
-                        },
-                    });
-                }
-                return configs;
-            }
-            catch {
-                return [];
-            }
+            const models = await refreshKenariModels(context);
+            return toProviderModelConfigs(models);
         },
     });
 }
-// Re-export for programmatic use.
-export { fetchKenariModels } from "./models.js";
-export { generateImages } from "./api/images.js";
+export { createVideoJob, generateAudio, generateMusic, generateVideo, pollVideoJob, } from "./api/audio.js";
 export { createEmbeddings } from "./api/embeddings.js";
-export { rerankDocuments } from "./api/rerank.js";
+export { generateImages } from "./api/images.js";
 export { moderateContent } from "./api/moderations.js";
-export { generateAudio, generateMusic, generateVideo } from "./api/audio.js";
+export { rerankDocuments } from "./api/rerank.js";
+// Re-export for programmatic use.
+export { fetchKenariModels, fetchKenariModelsByModality, refreshKenariModels, toKenariModels, } from "./models.js";

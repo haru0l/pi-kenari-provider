@@ -16,11 +16,11 @@
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 export default function (pi: ExtensionAPI): void;
-export { fetchKenariModels } from "./models.js";
-export { generateImages } from "./api/images.js";
+export { createVideoJob, generateAudio, generateMusic, generateVideo, pollVideoJob, } from "./api/audio.js";
 export { createEmbeddings } from "./api/embeddings.js";
-export { rerankDocuments } from "./api/rerank.js";
+export { generateImages } from "./api/images.js";
 export { moderateContent } from "./api/moderations.js";
-export { generateAudio, generateMusic, generateVideo } from "./api/audio.js";
-export type { KenariModel, KenariOpenAIModel, KenariAnthropicModel } from "./types.js";
+export { rerankDocuments } from "./api/rerank.js";
+export { fetchKenariModels, fetchKenariModelsByModality, refreshKenariModels, toKenariModels, } from "./models.js";
+export type { KenariAnthropicModel, KenariModel, KenariOpenAIModel, } from "./types.js";
 //# sourceMappingURL=index.d.ts.map

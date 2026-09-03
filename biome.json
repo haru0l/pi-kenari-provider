@@ -6,8 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": false,
-    "ignore": ["dist", "node_modules", "package-lock.json"]
+    "ignoreUnknown": false
   },
   "formatter": {
     "enabled": true,
@@ -35,9 +34,6 @@
         "noBannedTypes": "off"
       }
     }
-  },
-  "organizeImports": {
-    "enabled": false
   },
   "json": {
     "formatter": {

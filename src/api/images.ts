@@ -9,7 +9,10 @@
  */
 
 import { BASE_URL_KENARI } from "../constants.js";
-import type { KenariImageGenerateOptions, KenariImageResponse } from "../types.js";
+import type {
+  KenariImageGenerateOptions,
+  KenariImageResponse,
+} from "../types.js";
 
 /** Generate images via kenari's /v1/images/generations endpoint. */
 export async function generateImages(
@@ -29,7 +32,8 @@ export async function generateImages(
   if (options.quality !== undefined) body.quality = options.quality;
   if (options.style !== undefined) body.style = options.style;
   if (options.background !== undefined) body.background = options.background;
-  if (options.response_format !== undefined) body.response_format = options.response_format;
+  if (options.response_format !== undefined)
+    body.response_format = options.response_format;
 
   const response = await fetch(`${BASE_URL_KENARI}/images/generations`, {
     method: "POST",
@@ -43,7 +47,9 @@ export async function generateImages(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`kenari image generation failed (${response.status}): ${text}`);
+    throw new Error(
+      `kenari image generation failed (${response.status}): ${text}`,
+    );
   }
 
   return (await response.json()) as KenariImageResponse;

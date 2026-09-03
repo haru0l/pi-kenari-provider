@@ -102,16 +102,15 @@ Moderate content via `POST /v1/moderations`.
 
 ### `generateAudio(options: KenariAudioOptions): Promise<ArrayBuffer>`
 
-Generate audio via `POST /v1/audio`.
+Generate audio (TTS) via `POST /v1/audio/speech`.
 
 ### `generateMusic(options: KenariMusicOptions): Promise<ArrayBuffer>`
 
-Generate music via `POST /v1/music`.
+Generate music via `POST /v1/music/generations` (lyrics or instrumental+prompt). Returns the decoded mp3 bytes.
 
 ### `generateVideo(options: KenariVideoOptions): Promise<ArrayBuffer>`
 
-Generate video via `POST /v1/video`.
-
+Generate video via the async endpoints: `POST /v1/videos/generations`, poll `GET /v1/videos/{id}`, download `GET /v1/videos/{id}/content`. Returns the clip bytes. `createVideoJob`/`pollVideoJob` are exported for manual control.
 ## Development
 
 ```bash

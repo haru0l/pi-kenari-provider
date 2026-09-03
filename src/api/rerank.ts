@@ -26,7 +26,9 @@ export async function rerankDocuments(
   });
 
   if (!response.ok) {
-    throw new Error(`kenari rerank failed (${response.status}): ${await response.text()}`);
+    throw new Error(
+      `kenari rerank failed (${response.status}): ${await response.text()}`,
+    );
   }
   return (await response.json()) as KenariRerankResponse;
 }

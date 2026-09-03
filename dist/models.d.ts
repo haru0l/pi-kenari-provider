@@ -1,21 +1,29 @@
 /**
  * Model catalog for kenari.
  *
- * kenari's catalog is dynamic — it exposes GET /v1/models (public) that returns
- * all available models across modalities. We fetch this at refresh time and
- * merge with a static baseline for offline initialization.
+ * kenari's catalog is dynamic — GET /v1/models (public) lists chat models with
+ * prices and capabilities. We fetch it at refresh time and merge with a static
+ * baseline for offline initialization. See llms-full.txt ("Models and pricing").
  *
- * kenari models use a :free suffix variant (e.g. step-3-7-flash:free) that
- * deducts no balance. Both paid and free variants are surfaced.
+ * Prices arrive as micro-Rupiah per 1M tokens and are converted to pi's
+ * USD-per-1M-token ModelCost. One model can have a paid id and a `:free`
+ * variant; both are listed by the API and both are surfaced here.
  */
-import type { RefreshModelsContext } from "@earendil-works/pi-ai";
+import type { Api, Model, RefreshModelsContext } from "@earendil-works/pi-ai";
 import type { KenariApiModel, KenariModel, KenariOpenAIModel } from "./types.js";
-/** Static baseline models — used for offline init before first fetch. */
+/** Static baseline models — used for offline init before first fetch. Prices from live catalog. */
 export declare const KENARI_BASELINE_MODELS: KenariOpenAIModel[];
-/** Fetch the full model catalog from kenari's public /v1/models endpoint. */
+/** Fetch the full chat model catalog from kenari's public /v1/models endpoint. */
 export declare function fetchKenariModels(signal?: AbortSignal): Promise<KenariApiModel[]>;
-/** Fetch models filtered by modality. */
-export declare function fetchKenariModelsByModality(modality: "chat" | "image" | "embedding" | "rerank" | "moderation", signal?: AbortSignal): Promise<KenariApiModel[]>;
+/** Fetch models filtered by modality (bare /v1/models lists chat models only). */
+export declare function fetchKenariModelsByModality(modality: "image" | "embedding" | "rerank" | "moderation", signal?: AbortSignal): Promise<KenariApiModel[]>;
+/** Convert kenari micro-IDR-per-1M-token rates to pi's USD-per-1M-token ModelCost. */
+export declare function microIdrCost(pricing: {
+    input?: number | null;
+    output?: number | null;
+    cache_read?: number | null;
+    cache_write?: number | null;
+}): Model<Api>["cost"];
 /** Convert a kenari API model to a pi-ai Model. */
 export declare function toKenariModel(apiModel: KenariApiModel): KenariModel | null;
 /** Convert a catalog of kenari API models to pi-ai Models. */

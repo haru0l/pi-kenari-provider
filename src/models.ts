@@ -1,20 +1,21 @@
 /**
  * Model catalog for kenari.
  *
- * kenari's catalog is dynamic — it exposes GET /v1/models (public) that returns
- * all available models across modalities. We fetch this at refresh time and
- * merge with a static baseline for offline initialization.
+ * kenari's catalog is dynamic — GET /v1/models (public) lists chat models with
+ * prices and capabilities. We fetch it at refresh time and merge with a static
+ * baseline for offline initialization. See llms-full.txt ("Models and pricing").
  *
- * kenari models use a :free suffix variant (e.g. step-3-7-flash:free) that
- * deducts no balance. Both paid and free variants are surfaced.
+ * Prices arrive as micro-Rupiah per 1M tokens and are converted to pi's
+ * USD-per-1M-token ModelCost. One model can have a paid id and a `:free`
+ * variant; both are listed by the API and both are surfaced here.
  */
 
-import type {
-  Api,
-  Model,
-  RefreshModelsContext,
-} from "@earendil-works/pi-ai";
-import { BASE_URL_KENARI, PROVIDER_KENARI } from "./constants.js";
+import type { Api, Model, RefreshModelsContext } from "@earendil-works/pi-ai";
+import {
+  BASE_URL_KENARI,
+  MICRO_IDR_PER_1M_TO_USD_PER_1M,
+  PROVIDER_KENARI,
+} from "./constants.js";
 import type {
   KenariApiModel,
   KenariModel,
@@ -25,9 +26,21 @@ import type {
 // Baseline catalog (offline fallback)
 // =============================================================================
 
-const ZERO_COST = Object.freeze({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+const ZERO_COST = Object.freeze({
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+});
 
-/** Static baseline models — used for offline init before first fetch. */
+/** Shared compat: kenari documents `max_tokens` (not max_completion_tokens) and no `store` field. */
+const KENARI_COMPAT = Object.freeze({
+  supportsStore: false,
+  maxTokensField: "max_tokens" as const,
+  supportsReasoningEffort: true,
+});
+
+/** Static baseline models — used for offline init before first fetch. Prices from live catalog. */
 export const KENARI_BASELINE_MODELS: KenariOpenAIModel[] = [
   {
     id: "step-3-7-flash:free",
@@ -36,10 +49,11 @@ export const KENARI_BASELINE_MODELS: KenariOpenAIModel[] = [
     provider: PROVIDER_KENARI,
     baseUrl: BASE_URL_KENARI,
     reasoning: true,
-    input: ["text"],
+    input: ["text", "image"],
     cost: ZERO_COST,
-    contextWindow: 131072,
+    contextWindow: 262144,
     maxTokens: 8192,
+    compat: KENARI_COMPAT,
     isFree: true,
   },
   {
@@ -49,10 +63,15 @@ export const KENARI_BASELINE_MODELS: KenariOpenAIModel[] = [
     provider: PROVIDER_KENARI,
     baseUrl: BASE_URL_KENARI,
     reasoning: true,
-    input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 131072,
+    input: ["text", "image"],
+    cost: microIdrCost({
+      input: 4_200_000_000,
+      output: 24_000_000_000,
+      cache_read: 840_000_000,
+    }),
+    contextWindow: 262144,
     maxTokens: 8192,
+    compat: KENARI_COMPAT,
     isFree: false,
   },
 ];
@@ -61,23 +80,27 @@ export const KENARI_BASELINE_MODELS: KenariOpenAIModel[] = [
 // Dynamic catalog fetch
 // =============================================================================
 
-/** Fetch the full model catalog from kenari's public /v1/models endpoint. */
-export async function fetchKenariModels(signal?: AbortSignal): Promise<KenariApiModel[]> {
+/** Fetch the full chat model catalog from kenari's public /v1/models endpoint. */
+export async function fetchKenariModels(
+  signal?: AbortSignal,
+): Promise<KenariApiModel[]> {
   const url = `${BASE_URL_KENARI}/models`;
   const response = await fetch(url, {
     headers: { Accept: "application/json" },
     signal,
   });
   if (!response.ok) {
-    throw new Error(`kenari /v1/models returned ${response.status}: ${await response.text()}`);
+    throw new Error(
+      `kenari /v1/models returned ${response.status}: ${await response.text()}`,
+    );
   }
   const json = (await response.json()) as { data?: KenariApiModel[] };
   return json.data ?? [];
 }
 
-/** Fetch models filtered by modality. */
+/** Fetch models filtered by modality (bare /v1/models lists chat models only). */
 export async function fetchKenariModelsByModality(
-  modality: "chat" | "image" | "embedding" | "rerank" | "moderation",
+  modality: "image" | "embedding" | "rerank" | "moderation",
   signal?: AbortSignal,
 ): Promise<KenariApiModel[]> {
   const url = `${BASE_URL_KENARI}/models?modality=${modality}`;
@@ -86,7 +109,9 @@ export async function fetchKenariModelsByModality(
     signal,
   });
   if (!response.ok) {
-    throw new Error(`kenari /v1/models?modality=${modality} returned ${response.status}`);
+    throw new Error(
+      `kenari /v1/models?modality=${modality} returned ${response.status}`,
+    );
   }
   const json = (await response.json()) as { data?: KenariApiModel[] };
   return json.data ?? [];
@@ -96,54 +121,93 @@ export async function fetchKenariModelsByModality(
 // Catalog conversion
 // =============================================================================
 
+/** Convert kenari micro-IDR-per-1M-token rates to pi's USD-per-1M-token ModelCost. */
+export function microIdrCost(pricing: {
+  input?: number | null;
+  output?: number | null;
+  cache_read?: number | null;
+  cache_write?: number | null;
+}): Model<Api>["cost"] {
+  const rate = (v?: number | null) =>
+    typeof v === "number" && Number.isFinite(v)
+      ? v * MICRO_IDR_PER_1M_TO_USD_PER_1M
+      : 0;
+  const input = rate(pricing.input);
+  return {
+    input,
+    output: rate(pricing.output),
+    cacheRead: rate(pricing.cache_read),
+    // kenari bills cache-write at the input rate when no own rate is set.
+    cacheWrite: rate(pricing.cache_write ?? pricing.input),
+  };
+}
+
+/** Map pi thinking levels onto the model's supported kenari reasoning_options. */
+function toThinkingLevelMap(
+  options?: string[],
+): Model<Api>["thinkingLevelMap"] | undefined {
+  if (!options || options.length === 0) return undefined;
+  const ladder = ["low", "medium", "high", "xhigh", "max"] as const;
+  const supported = ladder.filter((l) => options.includes(l));
+  if (supported.length === 0) return undefined;
+  const lowest = supported[0]!;
+  const clamp = (level: string): string => {
+    const rank = ladder.indexOf(level as (typeof ladder)[number]);
+    if (rank === -1) return lowest; // minimal -> lowest supported option
+    for (let i = rank; i >= 0; i--) {
+      const candidate = ladder[i];
+      if (candidate && options.includes(candidate)) return candidate;
+    }
+    return lowest;
+  };
+  const map: NonNullable<Model<Api>["thinkingLevelMap"]> = {
+    off: "none", // kenari translates reasoning_effort "none" to the backend's native off
+  };
+  for (const level of [
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ] as const) {
+    map[level] = clamp(level);
+  }
+  return map;
+}
+
 /** Convert a kenari API model to a pi-ai Model. */
 export function toKenariModel(apiModel: KenariApiModel): KenariModel | null {
   const id = apiModel.id;
-  // Skip :free variants in the main list — we add them separately.
-  const isFree = id.endsWith(":free");
-
-  // Determine the API wire format.
-  // kenari supports both OpenAI-completions and Anthropic-messages.
-  // Default to openai-completions for chat models.
-  const api = "openai-completions" as const;
-  const inputModes: readonly string[] = apiModel.input ?? ["text"];
-  const cost = apiModel.cost ?? ZERO_COST;
+  if (!id) return null;
+  const isFree = id.endsWith(":free") || apiModel.pricing?.free === true;
+  const reasoning = apiModel.reasoning ?? false;
+  const inputs = apiModel.modalities?.input ?? ["text"];
 
   const model: KenariOpenAIModel = {
     id,
     name: apiModel.name ?? id,
-    api,
+    api: "openai-completions",
     provider: PROVIDER_KENARI,
     baseUrl: BASE_URL_KENARI,
-    reasoning: apiModel.reasoning ?? isReasoningModel(id),
-    input: inputModes as ("text" | "image")[],
-    cost: {
-      input: cost.input ?? 0,
-      output: cost.output ?? 0,
-      cacheRead: cost.cacheRead ?? 0,
-      cacheWrite: cost.cacheWrite ?? 0,
-    },
-    contextWindow: apiModel.contextWindow ?? apiModel.max_input_chars ?? 131072,
-    maxTokens: apiModel.maxTokens ?? 8192,
+    reasoning,
+    ...(reasoning && {
+      thinkingLevelMap: toThinkingLevelMap(apiModel.reasoning_options),
+    }),
+    input: inputs.includes("image")
+      ? (["text", "image"] as const)
+      : (["text"] as const),
+    // :free entries carry the paid rates in the catalog but are billed Rp 0.
+    cost: isFree ? { ...ZERO_COST } : apiModel.pricing ? microIdrCost(apiModel.pricing) : { ...ZERO_COST },
+    contextWindow: apiModel.context_length ?? 131072,
+    // Catalog exposes no max-output field; reasoning traces bill against
+    // max_tokens, so give reasoning models headroom (see kenari docs
+    // "Small max_tokens and empty output").
+    maxTokens: reasoning ? 16384 : 8192,
+    compat: KENARI_COMPAT,
     isFree,
-    modalities: apiModel.modalities,
   };
-  
   return model;
-}
-function isReasoningModel(id: string): boolean {
-  const lower = id.toLowerCase();
-  return (
-    lower.includes("opus") ||
-    lower.includes("sonnet") ||
-    lower.includes("deepseek") ||
-    lower.includes("step") ||
-    lower.includes("reasoning") ||
-    lower.includes("r1") ||
-    lower.includes("o1") ||
-    lower.includes("o3") ||
-    lower.includes("o4")
-  );
 }
 
 /** Convert a catalog of kenari API models to pi-ai Models. */

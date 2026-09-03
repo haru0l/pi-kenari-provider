@@ -4,7 +4,10 @@
  */
 
 import { BASE_URL_KENARI } from "../constants.js";
-import type { KenariModerationOptions, KenariModerationResponse } from "../types.js";
+import type {
+  KenariModerationOptions,
+  KenariModerationResponse,
+} from "../types.js";
 export async function moderateContent(
   options: KenariModerationOptions,
 ): Promise<KenariModerationResponse> {
@@ -25,7 +28,9 @@ export async function moderateContent(
   });
 
   if (!response.ok) {
-    throw new Error(`kenari moderations failed (${response.status}): ${await response.text()}`);
+    throw new Error(
+      `kenari moderations failed (${response.status}): ${await response.text()}`,
+    );
   }
   return (await response.json()) as KenariModerationResponse;
 }

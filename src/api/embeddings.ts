@@ -4,7 +4,10 @@
  */
 
 import { BASE_URL_KENARI } from "../constants.js";
-import type { KenariEmbeddingOptions, KenariEmbeddingResponse } from "../types.js";
+import type {
+  KenariEmbeddingOptions,
+  KenariEmbeddingResponse,
+} from "../types.js";
 export async function createEmbeddings(
   options: KenariEmbeddingOptions,
 ): Promise<KenariEmbeddingResponse> {
@@ -25,7 +28,9 @@ export async function createEmbeddings(
   });
 
   if (!response.ok) {
-    throw new Error(`kenari embeddings failed (${response.status}): ${await response.text()}`);
+    throw new Error(
+      `kenari embeddings failed (${response.status}): ${await response.text()}`,
+    );
   }
   return (await response.json()) as KenariEmbeddingResponse;
 }
