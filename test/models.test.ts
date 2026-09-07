@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { microIdrCost, toKenariModel, toKenariModels } from "../src/models.js";
+import {
+  KENARI_BASELINE_MODELS,
+  microIdrCost,
+  toKenariModel,
+  toKenariModels,
+} from "../src/models.js";
 import type { KenariApiModel } from "../src/types.js";
 
 // Live-catalog-shaped entry (claude-fable-5-like pricing, micro-IDR per 1M tokens).
@@ -99,5 +104,14 @@ describe("toKenariModels", () => {
     const models = toKenariModels([sample, { id: "bge-m3" }]);
     expect(models).toHaveLength(2);
     expect(models[1]!.name).toBe("bge-m3");
+  });
+});
+
+describe("kenari-free route", () => {
+  it("is in the baseline catalog and costs nothing", () => {
+    const route = KENARI_BASELINE_MODELS.find((m) => m.id === "kenari-free");
+    expect(route).toBeDefined();
+    expect(route!.isFree).toBe(true);
+    expect(route!.cost.input).toBe(0);
   });
 });

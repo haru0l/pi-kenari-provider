@@ -40,6 +40,25 @@ const KENARI_COMPAT = Object.freeze({
   supportsReasoningEffort: true,
 });
 
+/**
+ * The built-in kenari-free route: exists on every account, points at free
+ * models, costs nothing, rate-limited per account. It is a route, not a
+ * model, so GET /v1/models never lists it — add it manually.
+ */
+export const KENARI_FREE_ROUTE_MODEL: KenariOpenAIModel = {
+  id: "kenari-free",
+  name: "kenari-free route (free models)",
+  api: "openai-completions",
+  provider: PROVIDER_KENARI,
+  baseUrl: BASE_URL_KENARI,
+  reasoning: false,
+  input: ["text", "image"],
+  cost: ZERO_COST,
+  contextWindow: 131072,
+  maxTokens: 8192,
+  compat: KENARI_COMPAT,
+  isFree: true,
+};
 /** Static baseline models — used for offline init before first fetch. Prices from live catalog. */
 export const KENARI_BASELINE_MODELS: KenariOpenAIModel[] = [
   {
@@ -74,6 +93,7 @@ export const KENARI_BASELINE_MODELS: KenariOpenAIModel[] = [
     compat: KENARI_COMPAT,
     isFree: false,
   },
+  KENARI_FREE_ROUTE_MODEL,
 ];
 
 // =============================================================================
@@ -198,7 +218,11 @@ export function toKenariModel(apiModel: KenariApiModel): KenariModel | null {
       ? (["text", "image"] as const)
       : (["text"] as const),
     // :free entries carry the paid rates in the catalog but are billed Rp 0.
-    cost: isFree ? { ...ZERO_COST } : apiModel.pricing ? microIdrCost(apiModel.pricing) : { ...ZERO_COST },
+    cost: isFree
+      ? { ...ZERO_COST }
+      : apiModel.pricing
+        ? microIdrCost(apiModel.pricing)
+        : { ...ZERO_COST },
     contextWindow: apiModel.context_length ?? 131072,
     // Catalog exposes no max-output field; reasoning traces bill against
     // max_tokens, so give reasoning models headroom (see kenari docs
@@ -238,6 +262,10 @@ export async function refreshKenariModels(
   try {
     const apiModels = await fetchKenariModels(context.signal);
     const models = toKenariModels(apiModels);
+    // The built-in route is not a catalog model; keep it available.
+    if (!models.some((m) => m.id === KENARI_FREE_ROUTE_MODEL.id)) {
+      models.unshift(KENARI_FREE_ROUTE_MODEL);
+    }
 
     // Publish to pi's model store if available.
     if (context.publish && models.length > 0) {

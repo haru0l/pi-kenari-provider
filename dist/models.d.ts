@@ -11,6 +11,12 @@
  */
 import type { Api, Model, RefreshModelsContext } from "@earendil-works/pi-ai";
 import type { KenariApiModel, KenariModel, KenariOpenAIModel } from "./types.js";
+/**
+ * The built-in kenari-free route: exists on every account, points at free
+ * models, costs nothing, rate-limited per account. It is a route, not a
+ * model, so GET /v1/models never lists it — add it manually.
+ */
+export declare const KENARI_FREE_ROUTE_MODEL: KenariOpenAIModel;
 /** Static baseline models — used for offline init before first fetch. Prices from live catalog. */
 export declare const KENARI_BASELINE_MODELS: KenariOpenAIModel[];
 /** Fetch the full chat model catalog from kenari's public /v1/models endpoint. */
