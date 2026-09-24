@@ -55,7 +55,7 @@ export const KENARI_FREE_ROUTE_MODEL: KenariOpenAIModel = {
   input: ["text", "image"],
   cost: ZERO_COST,
   contextWindow: 131072,
-  maxTokens: 8192,
+  maxTokens: 65536,
   compat: KENARI_COMPAT,
   isFree: true,
 };
@@ -71,7 +71,7 @@ export const KENARI_BASELINE_MODELS: KenariOpenAIModel[] = [
     input: ["text", "image"],
     cost: ZERO_COST,
     contextWindow: 262144,
-    maxTokens: 8192,
+    maxTokens: 65536,
     compat: KENARI_COMPAT,
     isFree: true,
   },
@@ -89,7 +89,7 @@ export const KENARI_BASELINE_MODELS: KenariOpenAIModel[] = [
       cache_read: 840_000_000,
     }),
     contextWindow: 262144,
-    maxTokens: 8192,
+    maxTokens: 65536,
     compat: KENARI_COMPAT,
     isFree: false,
   },
@@ -225,9 +225,9 @@ export function toKenariModel(apiModel: KenariApiModel): KenariModel | null {
         : { ...ZERO_COST },
     contextWindow: apiModel.context_length ?? 131072,
     // Catalog exposes no max-output field; reasoning traces bill against
-    // max_tokens, so give reasoning models headroom (see kenari docs
+    // max_tokens, so use a generous cap (see kenari docs
     // "Small max_tokens and empty output").
-    maxTokens: reasoning ? 16384 : 8192,
+    maxTokens: 65536,
     compat: KENARI_COMPAT,
     isFree,
   };
