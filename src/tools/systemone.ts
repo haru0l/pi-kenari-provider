@@ -14,13 +14,24 @@ import type { Static } from "typebox";
 import { Type } from "typebox";
 import { runSystemOne } from "../api/systemone.js";
 import { PROVIDER_KENARI } from "../constants.js";
-import { getKenariSystemOneInputRate } from "../systemone.js";
+import {
+  fetchKenariSystemOneModelCatalog,
+  getKenariSystemOneInputRate,
+  type KenariSystemOneModelInfo,
+} from "../systemone.js";
 import type {
   KenariSystemOneImageAsset,
   KenariSystemOneOptions,
   KenariSystemOneResponse,
 } from "../types.js";
-import { renderSystemOneResult } from "./systemone-render.js";
+import {
+  defaultSystemOneModel,
+  resolveSystemOneModel,
+} from "./systemone-model.js";
+import {
+  renderSystemOneModelCatalog,
+  renderSystemOneResult,
+} from "./systemone-render.js";
 
 /**
  * Public tool parameters (the LLM-facing boundary schema).
@@ -40,6 +51,12 @@ import { renderSystemOneResult } from "./systemone-render.js";
  */
 export const systemOneParams = Type.Object(
   {
+    action: Type.Optional(
+      Type.String({
+        description:
+          'What to do: "models" lists the System One models (id, free/paid, text vs image input, questions vs fields, input price) and judges nothing. Omit it to judge.',
+      }),
+    ),
     state: Type.Optional(
       Type.Any({
         description:
@@ -62,7 +79,7 @@ export const systemOneParams = Type.Object(
     model: Type.Optional(
       Type.String({
         description:
-          "System One model id from ?modality=systemone: clef:free (free, text+image), clef-flash:free, clef-omni:free, clef, jev-1-13, jev-1-14. Default: clef:free.",
+          'Which System One model judges the request. Omit it and the tool picks by request shape: clef:free for questions, clairic:free for fields, an image-capable model when assets are sent. Call action: "models" for the current list, prices and capabilities; an unknown or unsuitable id is rejected with what fits.',
       }),
     ),
     fields: Type.Optional(
@@ -100,6 +117,7 @@ export type SystemOneParams = Static<typeof systemOneParams>;
  */
 const PASSTHROUGH_KEYS: readonly string[] = [
   "state",
+  "action",
   "questions",
   "model",
   "fields",
@@ -1058,7 +1076,7 @@ function normalizeArgs(args: unknown, drops?: string[]): SystemOneParams {
 
 // Keep codemode's result small and question-name keyed; each answer carries
 // its own kind-specific fields without requiring a per-kind schema union.
-const systemOneOutput = Type.Object({
+const systemOneAnswersOutput = Type.Object({
   answers: Type.Object(
     {},
     {
@@ -1092,9 +1110,41 @@ const systemOneOutput = Type.Object({
   }),
 });
 
+// `action: "models"` answers with the catalog and judges nothing, so the two
+// results share no `answers` slot — the union keeps each shape honest.
+const systemOneModelsOutput = Type.Object({
+  models: Type.Array(
+    Type.Object({
+      id: Type.String(),
+      name: Type.String(),
+      isFree: Type.Boolean(),
+      input: Type.Array(Type.String()),
+      capabilities: Type.Array(Type.String()),
+      inputMicroIdr: Type.Optional(Type.Number()),
+    }),
+  ),
+  defaults: Type.Object({
+    questions: Type.String(),
+    fields: Type.String(),
+  }),
+  source: Type.String(),
+});
+
+const systemOneOutput = Type.Union([
+  systemOneAnswersOutput,
+  systemOneModelsOutput,
+]);
+
 export interface SystemOneDetails {
-  answers: Record<string, unknown>;
+  /** Absent on `action: "models"`, which judges nothing. */
+  answers?: Record<string, unknown>;
+  /** The catalog an `action: "models"` call returned. */
+  models?: KenariSystemOneModelInfo[];
+  source?: string;
+  /** The id that ran, and what the caller asked for when they differed. */
   model?: string;
+  requestedModel?: string;
+  action?: string;
   usage?: {
     inputTokens?: number;
     outputTokens?: number;
@@ -1225,9 +1275,60 @@ function assertAnswerableFields(fields: unknown): void {
   }
 }
 
-/** Default judge: the free Clef variant accepts text and images. */
-const DEFAULT_SYSTEMONE_MODEL = "clef:free";
+/**
+ * Answer `action: "models"`: fetch the catalog, cache it for model choice, and
+ * render the decision — which id, what it costs, what it can answer. Judging
+ * nothing, it returns zero usage.
+ */
+async function renderModelCatalogAction(
+  signal: AbortSignal | undefined,
+): Promise<{
+  content: Array<{ type: "text"; text: string }>;
+  structuredContent: JsonValue;
+  details: SystemOneDetails;
+  usage: Usage;
+}> {
+  const catalog = await fetchKenariSystemOneModelCatalog(signal);
+  const defaults = {
+    questions: defaultSystemOneModel(
+      { fields: false, images: false },
+      catalog.models,
+    ).id,
+    fields: defaultSystemOneModel(
+      { fields: true, images: false },
+      catalog.models,
+    ).id,
+  };
 
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: renderSystemOneModelCatalog(
+          catalog.models,
+          defaults,
+          catalog.source,
+        ),
+      },
+    ],
+    // The catalog entries are plain data; the cast only satisfies JsonValue's
+    // index signature, which a declared interface never carries.
+    structuredContent: {
+      models: catalog.models,
+      defaults,
+      source: catalog.source,
+      metadata: { provider: PROVIDER_KENARI },
+    } as unknown as JsonValue,
+    details: {
+      models: catalog.models,
+      source: catalog.source,
+      action: "models",
+      metadata: { provider: PROVIDER_KENARI },
+    },
+    // Nothing was judged, so nothing was billed.
+    usage: zeroUsage(),
+  };
+}
 /** Image formats kenari accepts for `assets`. */
 const ASSET_FORMATS: Record<string, "png" | "jpg"> = {
   ".png": "png",
@@ -1317,6 +1418,24 @@ function toUsage(response: KenariSystemOneResponse, model: string): Usage {
   };
 }
 
+/** Nothing was judged, so nothing was billed. */
+function zeroUsage(): Usage {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
+  };
+}
+
 /**
  * The `system_one` tool. It resolves kenari credentials from the model
  * registry, so it works wherever the kenari provider is logged in, and it never
@@ -1394,6 +1513,23 @@ export const systemOneTool: ToolDefinition<
     }
     const request = normalized as Record<string, unknown>;
 
+    // The catalog action answers before any request validation: it judges
+    // nothing, so it needs no state, no questions and no credentials — the
+    // kenari catalog endpoint is public, and being able to list models before
+    // login is the whole point of the action.
+    const action =
+      typeof request.action === "string"
+        ? request.action.trim().toLowerCase()
+        : "";
+    if (action !== "") {
+      if (action !== "models") {
+        throw new Error(
+          `system_one: unknown action "${action}". The only action is "models"; omit it to judge.`,
+        );
+      }
+      return renderModelCatalogAction(signal);
+    }
+
     const fields = request.fields;
     if (fields !== undefined && request.questions !== undefined) {
       throw new Error(
@@ -1411,6 +1547,16 @@ export const systemOneTool: ToolDefinition<
       );
     }
 
+    // Resolve the model against the cached catalog: this rejects an unknown or
+    // unsuitable id before the request leaves, and never costs a round trip.
+    // Capability is judged from the request shape, so the default is the model
+    // that can actually answer it.
+    const resolved = resolveSystemOneModel(request.model, {
+      fields: fields !== undefined,
+      images: assets !== undefined,
+    });
+    const model = resolved.id;
+
     const apiKey =
       await ctx.modelRegistry.getApiKeyForProvider(PROVIDER_KENARI);
     if (!apiKey) {
@@ -1418,12 +1564,6 @@ export const systemOneTool: ToolDefinition<
         'system_one: no kenari credentials. Run "/login kenari" or set KENARI_API_KEY.',
       );
     }
-
-    const model =
-      typeof request.model === "string" && request.model.trim() !== ""
-        ? request.model.trim()
-        : DEFAULT_SYSTEMONE_MODEL;
-
     const startedAt = Date.now();
     const response = await runSystemOne({
       model,
@@ -1476,6 +1616,11 @@ export const systemOneTool: ToolDefinition<
       details: {
         answers,
         model: response.model,
+        // Only set when the caller's spelling differed from the id that ran,
+        // so an alias is reported rather than silently swallowed.
+        ...(resolved.requested !== undefined
+          ? { requestedModel: resolved.requested }
+          : {}),
         usage,
         metadata: { provider: PROVIDER_KENARI, latencyMs },
       },

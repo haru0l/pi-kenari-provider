@@ -15,7 +15,7 @@ kenari is an LLM gateway — one base URL (`https://kenari.id/v1`) speaks both t
 - **Moderations** — `POST /v1/moderations` (OpenAI Moderations-compatible)
 - **System One** — `POST /v1/systemone` for typed questions (noul, choice, score, box) and Clairic field extraction
 - **System One classifiers** — registers every questions-capable System One model as a pi classifier, callable from codemode (`models.classify`) and extensions, deliberately kept out of `/model`
-- **`system_one` tool + `system-one` skill** — the bundled skill routes decisions, image questions and field extraction to the tool, on free `clef:free` by default
+- **`system_one` tool + `system-one` skill** — the bundled skill routes decisions, image questions and field extraction to the tool, which defaults by request shape (`clef:free`, or `clairic:free` for `fields`) and lists the live catalog on `action: "models"`
 - **`generate_image` tool** — draws with kenari image models, renders the picture inline in the conversation, and saves the same bytes into the working directory
 - **Specialized model discovery** — `GET /v1/models?modality=` for `embedding`, `rerank`, `moderation` and `systemone` models
 - **Web search / fetch / X search** — `POST /v1/web/search`, `/v1/web/fetch` and `/v1/x/search`
@@ -92,6 +92,14 @@ const out = await models.classify(clef, {
 Extensions use `ctx.modelRegistry.classify()` with the same context shape.
 
 **From chat** — the extension registers a `system_one` tool and ships the `system-one` skill that tells the model when to call it. The tool also reaches what the classifier interface cannot express: `box` questions (locate something in an image), Clairic `fields` extraction, audio/video state, and `reference_date` anchoring.
+
+**Choosing a model** — omit `model` and the tool picks by request shape (`clef:free` for questions, `clairic:free` for `fields`, an image-capable model when `assets` are sent). To see the live catalog with prices and capabilities:
+
+```json
+{ "action": "models" }
+```
+
+That action is public, so it works before login, and it refreshes the cache model choice resolves against. An explicit `model` is validated offline against that cache: a provider prefix (`kenari/clef:free`), casing and the `jev` / `flash` / `omni` shorthands are normalized, an unknown id is rejected with the nearest real ids, and an id that cannot answer the request (fields on a questions model, an image on the text-only `clef` or `jev-1-13`) is rejected before the request leaves. Judgment calls never fetch the catalog — only `action: "models"` does.
 
 
 ## API
@@ -185,7 +193,7 @@ Answers carry `confidence`; Clairic fields also carry `guess`, `p_null` and, for
 
 `getKenariSystemOneBaselineModels()` returns the six questions-capable System One models, and `refreshKenariSystemOneModels(context)` fetches them live from `GET /v1/models?modality=systemone`. `toProviderClassifierConfigs()` turns either list into the `type: "classifier"` entries the provider registers, so they are callable through `models.classify()` and `ctx.modelRegistry.classify()` and never appear in `/model`.
 
-`clairic:free` is deliberately excluded — it answers `fields` extraction and rejects `questions`, which the classifier interface cannot express. Use the `system_one` tool for it, and for `box` questions, audio/video state and `reference_date`.
+`clairic:free` is deliberately excluded — it answers `fields` extraction and rejects `questions`, which the classifier interface cannot express. Use the `system_one` tool for it, and for `box` questions, audio/video state and `reference_date`. It stays visible in the `action: "models"` catalog, which is for choosing rather than classifying.
 
 Images travel as kenari `assets` (`compat.imageInput: "assets"`) without TypeSafe's opt-in header, and `getKenariSystemOneInputRate(id)` gives the USD input rate pi uses for cost accounting.
 

@@ -14,6 +14,7 @@
  */
 
 // biome-ignore-all lint/suspicious/noExplicitAny: intentional dynamic boundary over JSON protocol values
+import type { KenariSystemOneModelInfo } from "../systemone.js";
 
 /** Is this probability key an index slot rather than a self-describing label? */
 function isSlotKey(key: string): boolean {
@@ -144,4 +145,67 @@ export function renderSystemOneResult(
     );
   }
   return lines.join("\n").trimEnd();
+}
+
+/**
+ * Render the model catalog for `action: "models"`.
+ *
+ * The point of this output is the *decision*, not the inventory: which id to
+ * send, and what it will cost. So the capabilities and the caveats that make a
+ * wrong pick fail (fields needs Clairic; two strong models cannot read images)
+ * are spelled out rather than left to be inferred from columns, and the two
+ * defaults are named at the bottom where the reader lands last.
+ */
+export function renderSystemOneModelCatalog(
+  models: KenariSystemOneModelInfo[],
+  defaults: { questions: string; fields: string },
+  source: "live" | "baseline",
+): string {
+  const lines = [
+    source === "live"
+      ? "System One models (live catalog)"
+      : "System One models (static catalog; the live fetch was unavailable)",
+    "",
+  ];
+
+  // Column widths come from the data: clef-omni accepts four modalities, and a
+  // fixed width would run that row into the next column.
+  const priceOf = (model: KenariSystemOneModelInfo): string =>
+    model.isFree
+      ? "free"
+      : model.inputMicroIdr !== undefined
+        ? `${formatMicroIdr(model.inputMicroIdr)} IDR/1M in`
+        : "paid";
+  const idWidth = Math.max(...models.map((m) => m.id.length), 2);
+  const priceWidth = Math.max(...models.map((m) => priceOf(m).length), 5) + 2;
+  const inputWidth =
+    Math.max(...models.map((m) => m.input.join("+").length), 5) + 2;
+
+  for (const model of models) {
+    const id = model.id.padEnd(idWidth);
+    const price = priceOf(model).padEnd(priceWidth);
+    const input = model.input.join("+").padEnd(inputWidth);
+    const answers = model.capabilities.join("/");
+    lines.push(`  ${id}  ${price}${input}${answers}`);
+  }
+
+  lines.push(
+    "",
+    `Defaults: ${defaults.questions} for questions, ${defaults.fields} for fields (omit "model" and the tool chooses by request shape).`,
+  );
+
+  // A paid input rate is the only figure here that costs money to ignore, so
+  // say what the unit means once rather than per row.
+  if (models.some((m) => !m.isFree && m.inputMicroIdr !== undefined)) {
+    lines.push(
+      "Prices are kenari's input rate per 1M tokens; questions are answered in one pass, so output is not usually billed.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/** Micro-Rupiah per 1M tokens is a large number; show it as IDR per 1M. */
+function formatMicroIdr(microIdr: number): string {
+  return (microIdr / 1_000_000).toLocaleString("en-US");
 }

@@ -21,7 +21,13 @@ export declare const KENARI_SYSTEMONE_API = "typesafe-system-one";
 /** A kenari System One model usable as a pi classifier. */
 export interface KenariSystemOneModel extends ClassifierModel<typeof KENARI_SYSTEMONE_API> {
     /** Whether this is a :free variant (no balance deducted). */
+    /** Whether this is a :free variant (no balance deducted). */
     isFree?: boolean;
+    /**
+     * The catalog's own input rate, micro-Rupiah per 1M tokens, kept alongside
+     * `cost` so model choice can quote the price in the currency kenari bills.
+     */
+    inputMicroIdr?: number;
 }
 /**
  * Shape of a classifier entry in `ProviderConfigInput.models`. pi's
@@ -52,8 +58,61 @@ export declare function toProviderClassifierConfigs(models: KenariSystemOneModel
 export declare const KENARI_SYSTEMONE_BASELINE_MODELS: KenariSystemOneModel[];
 /** Get the baseline System One classifiers for offline init. */
 export declare function getKenariSystemOneBaselineModels(): KenariSystemOneModel[];
-/** Input rate in USD per 1M tokens for a System One model id; 0 when unknown. */
+/**
+ * Input rate in USD per 1M tokens for a System One model id; 0 when unknown.
+ *
+ * Consults the live catalog's rate first: a paid model kenari ships tomorrow is
+ * absent from the static baseline, and pricing it as free would hide real
+ * spend. Falls back to the baseline for ids the catalog does not carry.
+ */
 export declare function getKenariSystemOneInputRate(modelId: string): number;
+/**
+ * What a System One model can answer. Clairic is the only `fields` model;
+ * everything else answers `questions` and rejects `fields`.
+ */
+export type KenariSystemOneCapability = "questions" | "fields";
+/**
+ * A catalog entry, for choosing a model rather than running one. Wider than
+ * `KenariSystemOneModel`, which is a pi classifier: this keeps Clairic (which
+ * answers `fields` and can never be a classifier), the catalog's raw input
+ * modalities, and the rate kenari quotes, so a caller can justify a choice.
+ */
+export interface KenariSystemOneModelInfo {
+    id: string;
+    name: string;
+    isFree: boolean;
+    /** Input modalities the model accepts: text, image, audio, video. */
+    input: string[];
+    capabilities: KenariSystemOneCapability[];
+    /** Catalog rate in micro-Rupiah per 1M input tokens; absent when free. */
+    inputMicroIdr?: number;
+}
+/** Convert a questions-capable classifier model to a catalog entry. */
+export declare function toKenariSystemOneModelInfo(model: KenariSystemOneModel): KenariSystemOneModelInfo;
+/** Convert a live `?modality=systemone` entry to a catalog entry. */
+export declare function apiModelToKenariSystemOneModelInfo(apiModel: KenariApiModel): KenariSystemOneModelInfo | null;
+/** The static catalog: every baseline model, then Clairic. */
+export declare const KENARI_SYSTEMONE_MODEL_INFO: readonly KenariSystemOneModelInfo[];
+/**
+ * The catalog model choice resolves against: the live one while it is fresh,
+ * the static one otherwise. Never fetches — resolving a `model` argument must
+ * not cost a network round trip.
+ */
+export declare function getKenariSystemOneModelCatalog(): readonly KenariSystemOneModelInfo[];
+/** Drop the cached catalog, so the next read falls back to the static one. */
+export declare function resetKenariSystemOneModelCatalog(): void;
+/** Where a catalog came from. */
+export type KenariSystemOneCatalogSource = "live" | "baseline";
+export interface KenariSystemOneCatalog {
+    models: KenariSystemOneModelInfo[];
+    source: KenariSystemOneCatalogSource;
+}
+/**
+ * Fetch the catalog for model choice and cache it. The endpoint is public, so
+ * this works before login; a failed fetch degrades to the static catalog
+ * instead of failing the call.
+ */
+export declare function fetchKenariSystemOneModelCatalog(signal?: AbortSignal): Promise<KenariSystemOneCatalog>;
 /** Fetch the System One catalog (public, no key needed). */
 export declare function fetchKenariSystemOneModels(signal?: AbortSignal): Promise<KenariSystemOneModel[]>;
 /**

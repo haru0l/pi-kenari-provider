@@ -1,6 +1,7 @@
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { Static } from "typebox";
 import { Type } from "typebox";
+import { type KenariSystemOneModelInfo } from "../systemone.js";
 /**
  * Public tool parameters (the LLM-facing boundary schema).
  *
@@ -18,6 +19,7 @@ import { Type } from "typebox";
  * what cannot be repaired with an actionable error.
  */
 export declare const systemOneParams: Type.TObject<{
+    action: Type.TOptional<Type.TString>;
     state: Type.TOptional<Type.TAny>;
     context: Type.TOptional<Type.TAny>;
     evidence: Type.TOptional<Type.TAny>;
@@ -45,8 +47,15 @@ export declare function prepareSystemOneArgs(args: unknown): SystemOneParams;
  */
 export declare function collectDiscardedQuestions(args: unknown): string[];
 export interface SystemOneDetails {
-    answers: Record<string, unknown>;
+    /** Absent on `action: "models"`, which judges nothing. */
+    answers?: Record<string, unknown>;
+    /** The catalog an `action: "models"` call returned. */
+    models?: KenariSystemOneModelInfo[];
+    source?: string;
+    /** The id that ran, and what the caller asked for when they differed. */
     model?: string;
+    requestedModel?: string;
+    action?: string;
     usage?: {
         inputTokens?: number;
         outputTokens?: number;

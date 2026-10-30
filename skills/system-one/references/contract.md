@@ -110,15 +110,21 @@ Answer: `{ "type": "field", "value": 42000, "guess": 42000, "p_null": 0.02, "con
 
 ## Models
 
-| Id | Modalities | Pricing | Notes |
+| Id | Accepts | Answers | Pricing |
 | --- | --- | --- | --- |
-| `clef:free` | text, image | free | default; the safest general choice |
-| `clef-flash:free` | text, image | free | fastest |
-| `clef-omni:free` | text, image, audio, video | free | use for audio/video state |
-| `clef` | text, image | paid, per input token | higher quality than free tier |
-| `jev-1-13` | text, image | paid, per input token | strong reasoning |
-| `jev-1-14` | text, image | paid, per input token | most accurate |
-| `clairic:free` | text, image | free | `fields` only; rejects `questions` |
+| `clef:free` | text, image | questions | free |
+| `clef-flash:free` | text, image | questions | free |
+| `clef-omni:free` | text, image, audio, video | questions | free |
+| `clef` | text | questions | paid, per input token |
+| `jev-1-13` | text | questions | paid, per input token |
+| `jev-1-14` | text, image | questions | paid, per input token |
+| `clairic:free` | text, image | `fields` only | free |
+
+`clef` and `jev-1-13` are **text-only**: they cannot read `assets`. The tool
+rejects an image sent to either before the request leaves.
+
+`system_one` with `{"action": "models"}` prints this list with live prices and a
+default for each request shape; prefer it over this table, which can go stale.
 
 The live list is `GET https://kenari.id/v1/models?modality=systemone`; the
 provider also registers every questions-capable model as a pi classifier, so

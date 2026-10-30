@@ -125,19 +125,41 @@ the input really does not contain the field.
 
 ## Choose the model
 
-| Model | Use it for |
-| --- | --- |
-| `clef:free` (default) | text + image questions, free |
-| `clef-flash:free` | fast, cheap triage, free |
-| `clef-omni:free` | free, also reads audio and video |
-| `clef` | paid, higher quality than the free tier |
-| `jev-1-13` / `jev-1-14` | strongest reasoning; `jev-1-14` is the most accurate |
-| `clairic:free` | `fields` extraction only — it rejects questions |
+Omit `model` and the tool picks by request shape: `clef:free` for questions,
+`clairic:free` for `fields`, and an image-capable model when you send `assets`.
+That is the right choice most of the time.
 
-Start with the default and only move to `jev-1-14` when a free model's answer is
-genuinely ambiguous. These models are not chat models: never ask one to write,
-summarize, or explain. Use the session's own model for prose and this tool for
-the verdict.
+To see what exists right now, with prices and capabilities:
+
+```json
+{ "action": "models" }
+```
+
+The list is fetched live from kenari, so it stays correct when models are added
+or repriced. It is also public — it works before you log in.
+
+Ask for a model explicitly when you have a reason:
+
+| Situation | Model |
+| --- | --- |
+| Default for questions | `clef:free` |
+| Bulk triage where speed beats accuracy | `clef-flash:free` |
+| A free answer came back genuinely ambiguous, or the call is high-stakes | `jev-1-14` |
+| `fields` extraction | `clairic:free` |
+
+Two things the tool will reject before the request leaves, so you do not have to
+remember them:
+
+- `fields` needs Clairic. Any other model answers questions and refuses fields.
+- `clef` and `jev-1-13` take **text only** — they cannot read `assets`. For
+  images use `clef:free`, `clef-flash:free`, `clef-omni:free` or `jev-1-14`.
+
+An unknown id is rejected with the nearest real ids, so a typo or a remembered
+but stale name costs one cheap retry rather than a 400. Escalate to `jev-1-14`
+only on a real ambiguity — it is billed per input token and the free tier is not.
+
+These models are not chat models: never ask one to write, summarize, or explain.
+Use the session's own model for prose and this tool for the verdict.
 
 ## Pitfalls
 

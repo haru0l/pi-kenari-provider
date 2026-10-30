@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  fetchKenariSystemOneModelCatalog,
   getKenariSystemOneBaselineModels,
   getKenariSystemOneInputRate,
   KENARI_SYSTEMONE_BASELINE_MODELS,
+  KENARI_SYSTEMONE_MODEL_INFO,
+  resetKenariSystemOneModelCatalog,
   toKenariSystemOneModel,
   toKenariSystemOneModels,
   toProviderClassifierConfigs,
 } from "../src/systemone.js";
 import { prepareSystemOneArgs, systemOneTool } from "../src/tools/systemone.js";
+import { resolveSystemOneModel } from "../src/tools/systemone-model.js";
 import type { KenariApiModel } from "../src/types.js";
 
 function apiModel(overrides: Partial<KenariApiModel> = {}): KenariApiModel {
@@ -141,6 +145,13 @@ describe("system_one argument normalization", () => {
     expect(args.assets).toEqual({ receipt: { path: "./receipt.png" } });
     expect(args.reference_date).toBe("2024-05-01");
     expect(args.junk).toBeUndefined();
+  });
+
+  it("carries the models action through normalization", () => {
+    // The action must survive the unknown-key drop, or the tool never sees it.
+    expect(prepareSystemOneArgs({ action: "models" })).toEqual({
+      action: "models",
+    });
   });
 
   it("normalizes box aliases to the box question type", () => {
@@ -296,5 +307,278 @@ describe("system_one tool", () => {
         context(null) as never,
       ),
     ).rejects.toThrow(/no kenari credentials/);
+  });
+});
+
+describe("system_one model choice", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetKenariSystemOneModelCatalog();
+  });
+
+  const catalog = KENARI_SYSTEMONE_MODEL_INFO;
+
+  it("lists Clairic as the only fields model", () => {
+    const clairic = catalog.find((m) => m.id === "clairic:free");
+    expect(clairic?.capabilities).toEqual(["fields"]);
+    expect(
+      catalog.filter((m) => m.capabilities.includes("questions")).length,
+    ).toBe(6);
+  });
+
+  it("resolves a provider-qualified id and a case variant", () => {
+    expect(resolveSystemOneModel("kenari/clef:free", need()).info.id).toBe(
+      "clef:free",
+    );
+    expect(resolveSystemOneModel("CLEF:Free", need()).info.id).toBe(
+      "clef:free",
+    );
+  });
+
+  it("expands the documented shorthands", () => {
+    expect(resolveSystemOneModel("jev", need()).info.id).toBe("jev-1-14");
+    expect(resolveSystemOneModel("flash", need()).info.id).toBe(
+      "clef-flash:free",
+    );
+    expect(resolveSystemOneModel("omni", need()).info.id).toBe(
+      "clef-omni:free",
+    );
+  });
+
+  it("suggests the catalog id for a version echo instead of guessing", () => {
+    expect(() => resolveSystemOneModel("jev-1.14.0", need())).toThrow(
+      /Did you mean "jev-1-14"/,
+    );
+  });
+
+  it("names the nearest ids for a typo", () => {
+    expect(() => resolveSystemOneModel("clef-falsh:free", need())).toThrow(
+      /Did you mean "clef-flash:free"/,
+    );
+  });
+
+  it("rejects fields on a questions model, naming the fields model", () => {
+    expect(() =>
+      resolveSystemOneModel("clef:free", { fields: true, images: false }),
+    ).toThrow(/answers questions, not fields extraction.*clairic:free/);
+  });
+
+  it("rejects questions on Clairic, naming a questions default", () => {
+    expect(() => resolveSystemOneModel("clairic:free", need())).toThrow(
+      /extracts fields only.*clef:free/,
+    );
+  });
+
+  it("rejects an image on a text-only model, listing what can read it", () => {
+    expect(() =>
+      resolveSystemOneModel("clef", { fields: false, images: true }),
+    ).toThrow(/takes text input only.*clef:free/);
+  });
+
+  it("defaults to Clairic for fields and Clef for questions", () => {
+    expect(
+      resolveSystemOneModel(undefined, { fields: true, images: false }).id,
+    ).toBe("clairic:free");
+    expect(resolveSystemOneModel(undefined, need()).id).toBe("clef:free");
+  });
+
+  it("defaults an image request to an image-capable model", () => {
+    const resolved = resolveSystemOneModel(undefined, {
+      fields: false,
+      images: true,
+    });
+    expect(resolved.info.input).toContain("image");
+  });
+});
+
+/** A plain questions request: no fields, no images. */
+function need(): { fields: boolean; images: boolean } {
+  return { fields: false, images: false };
+}
+
+describe("system_one action: models", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetKenariSystemOneModelCatalog();
+  });
+
+  function stubCatalog(body: unknown, ok = true) {
+    const fetchMock = vi.fn(async () => ({
+      ok,
+      status: ok ? 200 : 500,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  const liveCatalog = {
+    data: [
+      apiModel({
+        id: "clef:free",
+        name: "Clef",
+        pricing: { free: true, input: null },
+        modalities: { input: ["text", "image"] },
+      }),
+      apiModel({
+        id: "clef",
+        name: "Clef (paid)",
+        pricing: { input: 3_000_000_000 },
+        modalities: { input: ["text"] },
+      }),
+      apiModel({
+        id: "clairic:free",
+        name: "Clairic",
+        pricing: { free: true, input: null },
+        modalities: { input: ["text", "image"] },
+      }),
+    ],
+  };
+
+  /** The models action needs no credentials, so the registry can fail loudly. */
+  function noCredentialsContext() {
+    return {
+      cwd: process.cwd(),
+      modelRegistry: {
+        getApiKeyForProvider: async () => {
+          throw new Error("credentials must not be required");
+        },
+      },
+    };
+  }
+
+  it("lists the catalog without needing credentials or state", async () => {
+    const fetchMock = stubCatalog(liveCatalog);
+    const result = await systemOneTool.execute(
+      "call-models",
+      { action: "models" } as never,
+      undefined,
+      undefined,
+      noCredentialsContext() as never,
+    );
+
+    // One fetch, to the public catalog endpoint, and nothing judgment-shaped.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(String(url)).toContain("/models?modality=systemone");
+
+    const details = result.details as { models: { id: string }[] };
+    expect(details.models.map((m) => m.id)).toEqual([
+      "clef:free",
+      "clef",
+      "clairic:free",
+    ]);
+    // Clairic is listed as a fields model, not dropped.
+    const clairic = (
+      result.details as { models: { id: string; capabilities: string[] }[] }
+    ).models.find((m) => m.id === "clairic:free");
+    expect(clairic?.capabilities).toEqual(["fields"]);
+
+    expect(result.content[0]).toMatchObject({ type: "text" });
+    expect(result.usage?.cost.total).toBe(0);
+  });
+
+  it("renders prices, modalities and the two defaults", async () => {
+    stubCatalog(liveCatalog);
+    const result = await systemOneTool.execute(
+      "call-models",
+      { action: "models" } as never,
+      undefined,
+      undefined,
+      noCredentialsContext() as never,
+    );
+
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain("clef:free");
+    expect(text).toContain("3,000 IDR/1M in");
+    expect(text).toContain("Defaults: clef:free for questions, clairic:free");
+  });
+
+  it("falls back to the static catalog when the fetch fails", async () => {
+    stubCatalog({}, false);
+    const result = await systemOneTool.execute(
+      "call-models",
+      { action: "models" } as never,
+      undefined,
+      undefined,
+      noCredentialsContext() as never,
+    );
+
+    expect(result.details?.source).toBe("baseline");
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain("static catalog");
+  });
+
+  it("rejects an unknown action", async () => {
+    await expect(
+      systemOneTool.execute(
+        "call-bad",
+        { action: "list" } as never,
+        undefined,
+        undefined,
+        noCredentialsContext() as never,
+      ),
+    ).rejects.toThrow(/unknown action "list"/);
+  });
+
+  it("caches the catalog so a judgment call does not re-fetch it", async () => {
+    const fetchMock = stubCatalog(liveCatalog);
+    await systemOneTool.execute(
+      "call-models",
+      { action: "models" } as never,
+      undefined,
+      undefined,
+      noCredentialsContext() as never,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Model resolution now runs against the cached catalog: an id only the
+    // live catalog has must resolve without another fetch.
+    const resolved = resolveSystemOneModel("clef", {
+      fields: false,
+      images: false,
+    });
+    expect(resolved.id).toBe("clef");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("pricing follows the live catalog", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetKenariSystemOneModelCatalog();
+  });
+
+  it("prices a model the baseline does not know at its fetched rate", async () => {
+    // A paid model kenari ships after this build: absent from the static
+    // baseline, so only the fetched catalog can price it.
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [
+          apiModel({
+            id: "jev-2-0",
+            name: "Jev 2.0",
+            pricing: { input: 2_000_000_000 },
+            modalities: { input: ["text"] },
+          }),
+        ],
+      }),
+      text: async () => "{}",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Unknown before the catalog is fetched: no baseline entry, no rate.
+    expect(getKenariSystemOneInputRate("jev-2-0")).toBe(0);
+
+    await fetchKenariSystemOneModelCatalog();
+
+    // 2000 IDR per 1M tokens, in USD.
+    expect(getKenariSystemOneInputRate("jev-2-0")).toBeCloseTo(
+      2_000_000_000 / (1_000_000 * 16_500),
+      12,
+    );
   });
 });
