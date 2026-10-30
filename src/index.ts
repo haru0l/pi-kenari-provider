@@ -15,6 +15,7 @@
  *  - API key auth via KENARI_API_KEY env var or /login kenari
  */
 
+import { fileURLToPath } from "node:url";
 import type {
   Api,
   AssistantMessage,
@@ -27,12 +28,22 @@ import type {
   StreamOptions,
 } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+// Lazy so the System One classifier transport only loads when a classify call
+// actually runs, matching how pi loads its own built-in classifiers.
+import { typesafeSystemOneApi } from "@earendil-works/pi-ai/api/typesafe-system-one.lazy";
 import type {
   ExtensionAPI,
   ProviderModelConfig,
 } from "@earendil-works/pi-coding-agent";
 import { BASE_URL_KENARI, PROVIDER_KENARI } from "./constants.js";
 import { getKenariBaselineModels, refreshKenariModels } from "./models.js";
+import {
+  getKenariSystemOneBaselineModels,
+  refreshKenariSystemOneModels,
+  toProviderClassifierConfigs,
+} from "./systemone.js";
+import { generateImageTool } from "./tools/image.js";
+import { systemOneTool } from "./tools/systemone.js";
 import type { KenariModel } from "./types.js";
 
 // =============================================================================
@@ -153,7 +164,13 @@ function toProviderModelConfigs(models: KenariModel[]) {
 // =============================================================================
 
 export default function (pi: ExtensionAPI) {
-  const baselineConfigs = toProviderModelConfigs(getKenariBaselineModels());
+  const baselineChatConfigs = toProviderModelConfigs(getKenariBaselineModels());
+  // System One models are classifiers: callable through models.classify(), never
+  // in /model. Both kinds share one provider model list, so a refresh replaces
+  // the chat catalog without dropping the classifiers.
+  const baselineClassifierConfigs = toProviderClassifierConfigs(
+    getKenariSystemOneBaselineModels(),
+  );
 
   pi.registerProvider(PROVIDER_KENARI, {
     name: "kenari",
@@ -161,8 +178,14 @@ export default function (pi: ExtensionAPI) {
     api: "openai-completions",
     apiKey: "$KENARI_API_KEY",
     authHeader: true,
-    models: baselineConfigs,
+    models: [...baselineChatConfigs, ...baselineClassifierConfigs],
     streamSimple: kenariStreamSimple,
+    // The classifier models above need their transport registered too: without
+    // this map pi leaves provider.classify undefined and every
+    // models.classify() call fails with "no classifier implementation".
+    classifiers: {
+      "typesafe-system-one": typesafeSystemOneApi(),
+    },
     // API-key login so /login kenari stores the key for later sessions.
     oauth: {
       name: "kenari API key",
@@ -184,10 +207,28 @@ export default function (pi: ExtensionAPI) {
     refreshModels: async (
       context: RefreshModelsContext,
     ): Promise<ProviderModelConfig[]> => {
-      const models = await refreshKenariModels(context);
-      return toProviderModelConfigs(models);
+      const [models, systemOneModels] = await Promise.all([
+        refreshKenariModels(context),
+        refreshKenariSystemOneModels(context),
+      ]);
+      return [
+        ...toProviderModelConfigs(models),
+        ...toProviderClassifierConfigs(systemOneModels),
+      ];
     },
   });
+
+  // system_one: bounded judgments through kenari's System One models.
+  pi.registerTool(systemOneTool);
+
+  // generate_image: draw with kenari image models, render inline, save to cwd.
+  pi.registerTool(generateImageTool);
+
+  // Ship the skill with the extension. Resolving the path from this module
+  // means an installed package and a local checkout both find it.
+  pi.on("resources_discover", () => ({
+    skillPaths: [fileURLToPath(new URL("../skills", import.meta.url))],
+  }));
 }
 
 export { createEmbeddings } from "./api/embeddings.js";
@@ -207,6 +248,7 @@ export {
   refreshKenariModels,
   toKenariModels,
 } from "./models.js";
+export { generateImageTool } from "./tools/image.js";
 export type {
   KenariAnthropicModel,
   KenariImageData,

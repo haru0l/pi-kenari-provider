@@ -3,6 +3,8 @@
  */
 export declare const PROVIDER_KENARI = "kenari";
 export declare const BASE_URL_KENARI = "https://kenari.id/v1";
+/** Free image model the `generate_image` tool falls back to. */
+export declare const DEFAULT_IMAGE_MODEL = "agnes-image-2-5-flash:free";
 export declare const KENARI_API_KEY_ENV = "KENARI_API_KEY";
 /**
  * kenari prices are micro-IDR per 1M tokens; pi's ModelCost is USD per 1M

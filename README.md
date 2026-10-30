@@ -14,6 +14,9 @@ kenari is an LLM gateway — one base URL (`https://kenari.id/v1`) speaks both t
 - **Rerank** — `POST /v1/rerank` (Cohere-style relevance ranking)
 - **Moderations** — `POST /v1/moderations` (OpenAI Moderations-compatible)
 - **System One** — `POST /v1/systemone` for typed questions (noul, choice, score, box) and Clairic field extraction
+- **System One classifiers** — registers every questions-capable System One model as a pi classifier, callable from codemode (`models.classify`) and extensions, deliberately kept out of `/model`
+- **`system_one` tool + `system-one` skill** — the bundled skill routes decisions, image questions and field extraction to the tool, on free `clef:free` by default
+- **`generate_image` tool** — draws with kenari image models, renders the picture inline in the conversation, and saves the same bytes into the working directory
 - **Specialized model discovery** — `GET /v1/models?modality=` for `embedding`, `rerank`, `moderation` and `systemone` models
 - **Web search / fetch / X search** — `POST /v1/web/search`, `/v1/web/fetch` and `/v1/x/search`
 - **API key auth** — via `KENARI_API_KEY` env var or `/login kenari` (stored in `~/.pi/agent/auth.json`)
@@ -63,6 +66,33 @@ Use them like any pi model:
 > kenari/step-3-7-flash:free
 Hello!
 ```
+
+## System One
+
+System One models answer bounded questions about state you supply. They are not chat models, so they never appear in `/model` — they are registered as pi **classifiers** and reachable two ways.
+
+**From codemode or an extension** — every questions-capable System One model is a classifier (`clef:free`, `clef-flash:free`, `clef-omni:free`, `clef`, `jev-1-13`, `jev-1-14`). The classifier interface speaks `bool`, `choice` and `score`, over text and images; `bool` goes on the wire as kenari's `noul`:
+
+```js
+const clef = models.getAvailableOfType("classifier").find((m) => m.id === "clef:free");
+const out = await models.classify(clef, {
+  state: "the deploy failed twice with 503 from the gateway",
+  questions: {
+    incident: { type: "bool", instructions: "Is this a production incident?" },
+    owner: {
+      type: "choice",
+      instructions: "Which team owns it?",
+      criteria: { gateway: "routing", worker: "jobs" },
+    },
+  },
+});
+// out.answers.incident -> { type: "bool", probability: 0.63 }
+```
+
+Extensions use `ctx.modelRegistry.classify()` with the same context shape.
+
+**From chat** — the extension registers a `system_one` tool and ships the `system-one` skill that tells the model when to call it. The tool also reaches what the classifier interface cannot express: `box` questions (locate something in an image), Clairic `fields` extraction, audio/video state, and `reference_date` anchoring.
+
 
 ## API
 
@@ -149,6 +179,28 @@ const invoice = await runSystemOne({
 ```
 
 Answers carry `confidence`; Clairic fields also carry `guess`, `p_null` and, for text, the `span` of the guess in the read text. Use `reference_date` to anchor dates written without a year, and `options.return_state_text` to get back the text the spans refer to.
+`choice` and `score` answers carry `confidence`; a `noul` answer carries only its probability (`noul`), which is its uncertainty measure. `score` is fractional — 1.67 sits between two `legend` labels. Clairic fields also carry `guess`, `p_null` and, for text, the `span` of the guess in the read text. Use `reference_date` to anchor dates written without a year, and `options.return_state_text` to get back the text the spans refer to.
+
+### System One classifiers
+
+`getKenariSystemOneBaselineModels()` returns the six questions-capable System One models, and `refreshKenariSystemOneModels(context)` fetches them live from `GET /v1/models?modality=systemone`. `toProviderClassifierConfigs()` turns either list into the `type: "classifier"` entries the provider registers, so they are callable through `models.classify()` and `ctx.modelRegistry.classify()` and never appear in `/model`.
+
+`clairic:free` is deliberately excluded — it answers `fields` extraction and rejects `questions`, which the classifier interface cannot express. Use the `system_one` tool for it, and for `box` questions, audio/video state and `reference_date`.
+
+Images travel as kenari `assets` (`compat.imageInput: "assets"`) without TypeSafe's opt-in header, and `getKenariSystemOneInputRate(id)` gives the USD input rate pi uses for cost accounting.
+
+### `generateImageTool` / `generate_image`
+
+Draws through `POST /v1/images/generations` and does the two things the tool is
+there for: it returns the bytes as image content blocks, so the picture renders
+in the conversation, and it writes them into the working directory so later
+steps can reference a path. Files are written with the `wx` flag and a numeric
+suffix on collision, so nothing is ever overwritten; `output` names the first
+file and extra images from `n > 1` get `-2`, `-3`.
+
+It defaults to the free `agnes-image-2-5-flash:free`. `generateImageBytes()` and
+`decodeImage()` stay exported for code that wants the bytes without the file
+write.
 
 ### `webSearch(options: KenariWebSearchOptions): Promise<KenariWebSearchResponse>`
 
