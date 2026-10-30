@@ -52,9 +52,11 @@ describe("provider registration", () => {
     }
   });
 
-  it("registers both tools", () => {
+  it("registers every tool", () => {
     const { tools } = capture();
     expect(tools).toContain("system_one");
     expect(tools).toContain("generate_image");
+    // Distinct from pi's built-in `web_search` on purpose.
+    expect(tools).toContain("kenari_web_search");
   });
 });

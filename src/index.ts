@@ -11,7 +11,8 @@
  *  - OpenAI-completions wire format (kenari is an OpenAI drop-in)
  *  - :free model variants (no balance deducted)
  *  - Image generation, embeddings, rerank, moderations, system one
- *  - Web and X search (POST /v1/web/search, /v1/web/fetch, /v1/x/search)
+ *  - Web and X search (POST /v1/web/search, /v1/web/fetch, /v1/x/search),
+ *    with web search also registered as the `kenari_web_search` tool
  *  - API key auth via KENARI_API_KEY env var or /login kenari
  */
 
@@ -44,6 +45,7 @@ import {
 } from "./systemone.js";
 import { generateImageTool } from "./tools/image.js";
 import { systemOneTool } from "./tools/systemone.js";
+import { kenariWebSearchTool } from "./tools/web.js";
 import type { KenariModel } from "./types.js";
 
 // =============================================================================
@@ -224,6 +226,9 @@ export default function (pi: ExtensionAPI) {
   // generate_image: draw with kenari image models, render inline, save to cwd.
   pi.registerTool(generateImageTool);
 
+  // kenari_web_search: live web search, authenticated by the /login kenari key.
+  pi.registerTool(kenariWebSearchTool);
+
   // Ship the skill with the extension. Resolving the path from this module
   // means an installed package and a local checkout both find it.
   pi.on("resources_discover", () => ({
@@ -249,6 +254,7 @@ export {
   toKenariModels,
 } from "./models.js";
 export { generateImageTool } from "./tools/image.js";
+export { kenariWebSearchTool } from "./tools/web.js";
 export type {
   KenariAnthropicModel,
   KenariImageData,
