@@ -144,3 +144,4 @@ export { moderateContent } from "./api/moderations.js";
 export { rerankDocuments } from "./api/rerank.js";
 // Re-export for programmatic use.
 export { fetchKenariModels, fetchKenariModelsByModality, refreshKenariModels, toKenariModels, } from "./models.js";
+export { KENARI_MODALITIES } from "./types.js";

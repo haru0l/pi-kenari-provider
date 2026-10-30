@@ -96,7 +96,15 @@ export async function fetchKenariModels(signal) {
     const json = (await response.json());
     return json.data ?? [];
 }
-/** Fetch models filtered by modality (bare /v1/models lists chat models only). */
+/**
+ * Fetch models filtered by modality. The bare `/v1/models` call lists only
+ * chat, image, speech, transcription, music and video models — embedding,
+ * rerank, moderation and System One models appear only through this filter.
+ *
+ * The call is public (no key needed). Entries carry `modality` and
+ * `pricing_lines`, and their `pricing` holds only `input`, `free`, `currency`
+ * and `unit`.
+ */
 export async function fetchKenariModelsByModality(modality, signal) {
     const url = `${BASE_URL_KENARI}/models?modality=${modality}`;
     const response = await fetch(url, {
@@ -104,7 +112,8 @@ export async function fetchKenariModelsByModality(modality, signal) {
         signal,
     });
     if (!response.ok) {
-        throw new Error(`kenari /v1/models?modality=${modality} returned ${response.status}`);
+        // The 400 body lists the accepted values, so keep it in the message.
+        throw new Error(`kenari /v1/models?modality=${modality} returned ${response.status}: ${await response.text()}`);
     }
     const json = (await response.json());
     return json.data ?? [];

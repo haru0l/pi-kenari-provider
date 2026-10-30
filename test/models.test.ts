@@ -1,11 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  fetchKenariModelsByModality,
   KENARI_BASELINE_MODELS,
   microIdrCost,
   toKenariModel,
   toKenariModels,
 } from "../src/models.js";
-import type { KenariApiModel } from "../src/types.js";
+import type { KenariApiModel, KenariModality } from "../src/types.js";
+import { KENARI_MODALITIES } from "../src/types.js";
 
 // Live-catalog-shaped entry (claude-fable-5-like pricing, micro-IDR per 1M tokens).
 const sample: KenariApiModel = {
@@ -113,5 +115,96 @@ describe("kenari-free route", () => {
     expect(route).toBeDefined();
     expect(route!.isFree).toBe(true);
     expect(route!.cost.input).toBe(0);
+  });
+});
+
+describe("KENARI_MODALITIES", () => {
+  it("holds exactly the four values the API accepts", () => {
+    expect([...KENARI_MODALITIES]).toEqual([
+      "embedding",
+      "rerank",
+      "moderation",
+      "systemone",
+    ]);
+  });
+});
+
+describe("fetchKenariModelsByModality", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetch(response: {
+    ok: boolean;
+    status: number;
+    body: unknown;
+    text?: string;
+  }) {
+    const fetchMock = vi.fn(async () => ({
+      ok: response.ok,
+      status: response.status,
+      json: async () => response.body,
+      text: async () => response.text ?? JSON.stringify(response.body),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("requests the modality filter and returns its entries", async () => {
+    const entries: KenariApiModel[] = [
+      {
+        id: "bge-m3",
+        modality: "embedding",
+        endpoints: ["embeddings"],
+        pricing: { currency: "IDR", free: false, input: 250_000_000 },
+        pricing_lines: [
+          {
+            billable: "input",
+            endpoint: "embeddings",
+            micro_idr: 250_000_000,
+            unit: "token_1m",
+            variant: null,
+          },
+        ],
+      },
+    ];
+    const fetchMock = stubFetch({
+      ok: true,
+      status: 200,
+      body: { data: entries },
+    });
+
+    await expect(fetchKenariModelsByModality("embedding")).resolves.toEqual(
+      entries,
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://kenari.id/v1/models?modality=embedding",
+      expect.objectContaining({ headers: { Accept: "application/json" } }),
+    );
+  });
+
+  it("returns an empty list when the catalog has no models for a modality", async () => {
+    stubFetch({ ok: true, status: 200, body: { data: [] } });
+    await expect(fetchKenariModelsByModality("moderation")).resolves.toEqual(
+      [],
+    );
+  });
+
+  it("surfaces the API error body, which lists the accepted values", async () => {
+    stubFetch({
+      ok: false,
+      status: 400,
+      body: {},
+      text: '{"error":{"message":"unknown modality \'foo\'. Accepted values: embedding, rerank, moderation, systemone."}}',
+    });
+    await expect(fetchKenariModelsByModality("embedding")).rejects.toThrow(
+      /returned 400: .*Accepted values: embedding, rerank/,
+    );
+  });
+
+  it("accepts only the four documented modalities", () => {
+    // @ts-expect-error "image" is not a modality filter; the API returns 400.
+    const invalid: KenariModality = "image";
+    expect(KENARI_MODALITIES).not.toContain(invalid);
   });
 });

@@ -33,6 +33,19 @@ export type KenariModel = KenariOpenAIModel | KenariAnthropicModel;
 // =============================================================================
 // kenari API response types (from GET /v1/models)
 // =============================================================================
+/**
+ * Values accepted by `GET /v1/models?modality=...`. Any other value, including
+ * an empty one, returns 400. These models are never part of the bare
+ * `GET /v1/models` catalog, so they stay out of the pi chat model list.
+ */
+export const KENARI_MODALITIES = [
+  "embedding",
+  "rerank",
+  "moderation",
+  "systemone",
+] as const;
+
+export type KenariModality = (typeof KENARI_MODALITIES)[number];
 
 /** Rates in micro-Rupiah per 1 million tokens. */
 export interface KenariPricing {
@@ -44,10 +57,23 @@ export interface KenariPricing {
   free?: boolean;
   unit?: string;
 }
+/**
+ * One billable line on a model. Media and specialized models report `0` in
+ * `pricing.input`/`output` and carry the real rate here instead.
+ */
+export interface KenariPricingLine {
+  billable?: string;
+  endpoint?: string;
+  micro_idr?: number;
+  unit?: string;
+  variant?: string | null;
+}
 
 /** Matches the live GET /v1/models entry shape. */
 export interface KenariApiModel {
   id: string;
+  /** Present only on `?modality=` results; absent on the chat catalog. */
+  modality?: KenariModality;
   name?: string;
   owned_by?: string;
   context_length?: number;
@@ -55,6 +81,7 @@ export interface KenariApiModel {
   max_lyrics_chars?: number;
   max_prompt_chars?: number;
   pricing?: KenariPricing;
+  pricing_lines?: KenariPricingLine[];
   reasoning?: boolean;
   reasoning_options?: string[];
   reasoning_toggle?: boolean;

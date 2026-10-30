@@ -10,7 +10,7 @@
  * variant; both are listed by the API and both are surfaced here.
  */
 import type { Api, Model, RefreshModelsContext } from "@earendil-works/pi-ai";
-import type { KenariApiModel, KenariModel, KenariOpenAIModel } from "./types.js";
+import type { KenariApiModel, KenariModality, KenariModel, KenariOpenAIModel } from "./types.js";
 /**
  * The built-in kenari-free route: exists on every account, points at free
  * models, costs nothing, rate-limited per account. It is a route, not a
@@ -21,8 +21,16 @@ export declare const KENARI_FREE_ROUTE_MODEL: KenariOpenAIModel;
 export declare const KENARI_BASELINE_MODELS: KenariOpenAIModel[];
 /** Fetch the full chat model catalog from kenari's public /v1/models endpoint. */
 export declare function fetchKenariModels(signal?: AbortSignal): Promise<KenariApiModel[]>;
-/** Fetch models filtered by modality (bare /v1/models lists chat models only). */
-export declare function fetchKenariModelsByModality(modality: "image" | "embedding" | "rerank" | "moderation", signal?: AbortSignal): Promise<KenariApiModel[]>;
+/**
+ * Fetch models filtered by modality. The bare `/v1/models` call lists only
+ * chat, image, speech, transcription, music and video models — embedding,
+ * rerank, moderation and System One models appear only through this filter.
+ *
+ * The call is public (no key needed). Entries carry `modality` and
+ * `pricing_lines`, and their `pricing` holds only `input`, `free`, `currency`
+ * and `unit`.
+ */
+export declare function fetchKenariModelsByModality(modality: KenariModality, signal?: AbortSignal): Promise<KenariApiModel[]>;
 /** Convert kenari micro-IDR-per-1M-token rates to pi's USD-per-1M-token ModelCost. */
 export declare function microIdrCost(pricing: {
     input?: number | null;

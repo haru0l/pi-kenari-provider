@@ -13,6 +13,7 @@ kenari is an LLM gateway — one base URL (`https://kenari.id/v1`) speaks both t
 - **Embeddings** — `POST /v1/embeddings` (OpenAI Embeddings-compatible)
 - **Rerank** — `POST /v1/rerank` (Cohere-style relevance ranking)
 - **Moderations** — `POST /v1/moderations` (OpenAI Moderations-compatible)
+- **Specialized model discovery** — `GET /v1/models?modality=` for `embedding`, `rerank`, `moderation` and `systemone` models
 - **Audio / Music / Video** — generation endpoints for models that support them
 - **API key auth** — via `KENARI_API_KEY` env var or `/login kenari` (stored in `~/.pi/agent/auth.json`)
 
@@ -82,7 +83,7 @@ Fetch the raw model catalog from `GET /v1/models`.
 
 ### `fetchKenariModelsByModality(modality, signal?: AbortSignal): Promise<KenariApiModel[]>`
 
-Fetch models filtered by modality (`chat`, `image`, `embedding`, `rerank`, `moderation`).
+Fetch models filtered by modality — `embedding`, `rerank`, `moderation` or `systemone` (`KenariModality`). Any other value returns 400. The call is public (no key needed) and returns `modality` and `pricing_lines` on each entry. These models are never part of the bare `/v1/models` chat catalog, so they do not appear in pi's `/models` list; use this to discover them programmatically.
 
 ### `generateImages(options: KenariImageGenerateOptions): Promise<KenariImageResponse>`
 

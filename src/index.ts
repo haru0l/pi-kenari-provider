@@ -215,6 +215,9 @@ export {
 } from "./models.js";
 export type {
   KenariAnthropicModel,
+  KenariModality,
   KenariModel,
   KenariOpenAIModel,
+  KenariPricingLine,
 } from "./types.js";
+export { KENARI_MODALITIES } from "./types.js";

@@ -22,5 +22,6 @@ export { generateImages } from "./api/images.js";
 export { moderateContent } from "./api/moderations.js";
 export { rerankDocuments } from "./api/rerank.js";
 export { fetchKenariModels, fetchKenariModelsByModality, refreshKenariModels, toKenariModels, } from "./models.js";
-export type { KenariAnthropicModel, KenariModel, KenariOpenAIModel, } from "./types.js";
+export type { KenariAnthropicModel, KenariModality, KenariModel, KenariOpenAIModel, KenariPricingLine, } from "./types.js";
+export { KENARI_MODALITIES } from "./types.js";
 //# sourceMappingURL=index.d.ts.map

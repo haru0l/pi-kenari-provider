@@ -18,6 +18,7 @@ import {
 } from "./constants.js";
 import type {
   KenariApiModel,
+  KenariModality,
   KenariModel,
   KenariOpenAIModel,
 } from "./types.js";
@@ -118,9 +119,17 @@ export async function fetchKenariModels(
   return json.data ?? [];
 }
 
-/** Fetch models filtered by modality (bare /v1/models lists chat models only). */
+/**
+ * Fetch models filtered by modality. The bare `/v1/models` call lists only
+ * chat, image, speech, transcription, music and video models — embedding,
+ * rerank, moderation and System One models appear only through this filter.
+ *
+ * The call is public (no key needed). Entries carry `modality` and
+ * `pricing_lines`, and their `pricing` holds only `input`, `free`, `currency`
+ * and `unit`.
+ */
 export async function fetchKenariModelsByModality(
-  modality: "image" | "embedding" | "rerank" | "moderation",
+  modality: KenariModality,
   signal?: AbortSignal,
 ): Promise<KenariApiModel[]> {
   const url = `${BASE_URL_KENARI}/models?modality=${modality}`;
@@ -129,8 +138,9 @@ export async function fetchKenariModelsByModality(
     signal,
   });
   if (!response.ok) {
+    // The 400 body lists the accepted values, so keep it in the message.
     throw new Error(
-      `kenari /v1/models?modality=${modality} returned ${response.status}`,
+      `kenari /v1/models?modality=${modality} returned ${response.status}: ${await response.text()}`,
     );
   }
   const json = (await response.json()) as { data?: KenariApiModel[] };
