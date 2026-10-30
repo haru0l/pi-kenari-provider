@@ -102,6 +102,19 @@ describe("decodeImage", () => {
     expect(result.mimeType).toBe("image/webp");
   });
 
+  it("falls back to url when b64_json is an empty string", () => {
+    // agnes-image-2-5-flash:free answers with b64_json:"" and a real data URI.
+    const result = decodeImage({
+      b64_json: "",
+      revised_prompt: "",
+      url: `data:image/png;base64,${base64}`,
+    });
+
+    expect(Array.from(result.bytes)).toEqual([1, 2, 3, 4]);
+    expect(result.mimeType).toBe("image/png");
+    expect(result.revisedPrompt).toBeUndefined();
+  });
+
   it("prefers b64_json when both are present", () => {
     const other = Buffer.from([9, 9]).toString("base64");
     const result = decodeImage({

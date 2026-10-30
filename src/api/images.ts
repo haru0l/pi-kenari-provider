@@ -108,9 +108,7 @@ async function decodeImageEntry(
     return {
       bytes: new Uint8Array(await download.arrayBuffer()),
       mimeType,
-      ...(image.revised_prompt !== undefined
-        ? { revisedPrompt: image.revised_prompt }
-        : {}),
+      ...(image.revised_prompt ? { revisedPrompt: image.revised_prompt } : {}),
     };
   }
 
@@ -121,7 +119,9 @@ async function decodeImageEntry(
 export function decodeImage(image: KenariImageData): KenariImageResult {
   const fromUri = image.url ? splitDataUri(image.url) : undefined;
 
-  const base64 = image.b64_json ?? fromUri?.base64;
+  // kenari sends `b64_json: ""` alongside a populated `url` for some models,
+  // so an empty string has to count as absent — `??` would keep it.
+  const base64 = image.b64_json || fromUri?.base64;
   if (!base64) {
     throw new Error(
       `kenari returned an image with neither b64_json nor a data: URI in url: ${JSON.stringify(
@@ -133,9 +133,7 @@ export function decodeImage(image: KenariImageData): KenariImageResult {
   return {
     bytes: new Uint8Array(Buffer.from(base64, "base64")),
     mimeType: fromUri?.mimeType ?? "image/png",
-    ...(image.revised_prompt !== undefined
-      ? { revisedPrompt: image.revised_prompt }
-      : {}),
+    ...(image.revised_prompt ? { revisedPrompt: image.revised_prompt } : {}),
   };
 }
 
