@@ -10,7 +10,7 @@
  *  - Dynamic model discovery from GET /v1/models (public, no key needed)
  *  - OpenAI-completions wire format (kenari is an OpenAI drop-in)
  *  - :free model variants (no balance deducted)
- *  - Image generation, embeddings, rerank, moderations
+ *  - Image generation, embeddings, rerank, moderations, system one
  *  - Audio, music, and video generation
  *  - API key auth via KENARI_API_KEY env var or /login kenari
  */
@@ -206,6 +206,7 @@ export { createEmbeddings } from "./api/embeddings.js";
 export { generateImages } from "./api/images.js";
 export { moderateContent } from "./api/moderations.js";
 export { rerankDocuments } from "./api/rerank.js";
+export { runSystemOne } from "./api/systemone.js";
 // Re-export for programmatic use.
 export {
   fetchKenariModels,
@@ -219,5 +220,19 @@ export type {
   KenariModel,
   KenariOpenAIModel,
   KenariPricingLine,
+  KenariSystemOneAnswer,
+  KenariSystemOneBoxAnswer,
+  KenariSystemOneChoiceAnswer,
+  KenariSystemOneField,
+  KenariSystemOneFieldAnswer,
+  KenariSystemOneFieldType,
+  KenariSystemOneImageAsset,
+  KenariSystemOneMedia,
+  KenariSystemOneNoulAnswer,
+  KenariSystemOneOptions,
+  KenariSystemOneQuestion,
+  KenariSystemOneQuestionType,
+  KenariSystemOneResponse,
+  KenariSystemOneScoreAnswer,
 } from "./types.js";
 export { KENARI_MODALITIES } from "./types.js";

@@ -13,6 +13,7 @@ kenari is an LLM gateway — one base URL (`https://kenari.id/v1`) speaks both t
 - **Embeddings** — `POST /v1/embeddings` (OpenAI Embeddings-compatible)
 - **Rerank** — `POST /v1/rerank` (Cohere-style relevance ranking)
 - **Moderations** — `POST /v1/moderations` (OpenAI Moderations-compatible)
+- **System One** — `POST /v1/systemone` for typed questions (noul, choice, score, box) and Clairic field extraction
 - **Specialized model discovery** — `GET /v1/models?modality=` for `embedding`, `rerank`, `moderation` and `systemone` models
 - **Audio / Music / Video** — generation endpoints for models that support them
 - **API key auth** — via `KENARI_API_KEY` env var or `/login kenari` (stored in `~/.pi/agent/auth.json`)
@@ -100,6 +101,37 @@ Rank documents by relevance via `POST /v1/rerank`.
 ### `moderateContent(options: KenariModerationOptions): Promise<KenariModerationResponse>`
 
 Moderate content via `POST /v1/moderations`.
+
+### `runSystemOne(options: KenariSystemOneOptions): Promise<KenariSystemOneResponse>`
+
+Ask typed questions or extract typed fields via `POST /v1/systemone` — kenari's own contract, which no OpenAI or Anthropic SDK method maps to. System One models are decision and extraction models, not chat models: call this endpoint with a chat id, or a chat endpoint with a System One id, and kenari returns 400. Discover the ids with `fetchKenariModelsByModality("systemone")`.
+
+`questions` runs noul, choice, score and box questions (up to 128); `fields` runs Clairic extraction (up to 64) — send one or the other, not both. An object or array `state` is sent as its JSON text.
+
+```ts
+const { answers } = await runSystemOne({
+  apiKey,
+  model: "clef:free",
+  state: "a cat sitting on a rug",
+  questions: {
+    pick: { type: "choice", instructions: "Which animal?", criteria: { cat: "a cat", dog: "a dog" } },
+  },
+});
+// answers.pick -> { type: "choice", choice: "cat", confidence: 0.98, probabilities: {...} }
+
+const invoice = await runSystemOne({
+  apiKey,
+  model: "clairic:free",
+  state: "Invoice INV-2291, issued 3 March 2026. Total due: Rp 4,250,000.",
+  fields: {
+    total: { type: "number", instructions: "The total due in rupiah" },
+    issued: { type: "date", instructions: "The issue date" },
+  },
+});
+// invoice.answers.total.value -> 4250000
+```
+
+Answers carry `confidence`; Clairic fields also carry `guess`, `p_null` and, for text, the `span` of the guess in the read text. Use `reference_date` to anchor dates written without a year, and `options.return_state_text` to get back the text the spans refer to.
 
 ### `generateAudio(options: KenariAudioOptions): Promise<ArrayBuffer>`
 

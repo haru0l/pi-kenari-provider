@@ -195,6 +195,172 @@ export interface KenariModerationResponse {
 }
 
 // =============================================================================
+// System One types
+//
+// kenari's decision and extraction models. `POST /v1/systemone` is kenari's own
+// contract — no OpenAI or Anthropic SDK method maps to it — so the shapes below
+// follow https://kenari.id/en/docs/systemone.
+// =============================================================================
+
+/** The four question types. `box` needs an image and answers with pixel fractions. */
+export type KenariSystemOneQuestionType = "noul" | "choice" | "score" | "box";
+
+export interface KenariSystemOneQuestion {
+  type: KenariSystemOneQuestionType;
+  /**
+   * The question itself. Use an image's `assets` reference name here (whole or
+   * inside the text) to point at that image.
+   */
+  instructions: string | Record<string, unknown> | unknown[];
+  /**
+   * `noul`: true/false descriptions. `choice`: a map of option -> description.
+   * `score`: an ordered rubric. `box` takes none.
+   */
+  criteria?: Record<string, unknown> | unknown[];
+}
+
+/** Field types accepted by Clairic's `fields` extraction. */
+export type KenariSystemOneFieldType =
+  | "text"
+  | "number"
+  | "date"
+  | "time"
+  | "datetime"
+  | "duration"
+  | "list"
+  | "estimate"
+  | "forecast";
+
+export interface KenariSystemOneField {
+  type: KenariSystemOneFieldType;
+  /** What the field should hold. Use an image reference name to point at an image. */
+  instructions?: string;
+  /** Type settings passed through as-is: `unit`, `integer`, `decimals`, `items`, `min`, `max`, `step`, `scale`, `null_threshold`, `horizon`, `interval`. */
+  [setting: string]: unknown;
+}
+
+/** An image sent under a reference name you choose. */
+export interface KenariSystemOneImageAsset {
+  type?: "image";
+  /** Must match the image bytes. */
+  format: "png" | "jpg" | "jpeg";
+  /** Standard base64, without a `data:` prefix. */
+  data_base64: string;
+}
+
+/** An audio clip or video: a `data:` URL, or the content type with base64. */
+export type KenariSystemOneMedia =
+  | string
+  | { content_type: string; base64: string };
+
+export interface KenariSystemOneOptions {
+  /** A System One model id from `?modality=systemone`. */
+  model: string;
+  /**
+   * The text or data to evaluate. An object or array is sent as its JSON text.
+   * A `fields` call can leave it out only when it also sends an image.
+   */
+  state?: string | Record<string, unknown> | unknown[];
+  /** Send this or `fields`, not both. Up to 128 questions. */
+  questions?: Record<string, KenariSystemOneQuestion>;
+  /** Clairic only. Send this or `questions`, not both. Up to 64 fields. */
+  fields?: Record<string, KenariSystemOneField>;
+  /** Clairic only. ISO date that anchors dates written without a year. */
+  reference_date?: string;
+  /** Clairic only. */
+  options?: {
+    /** Adds 99 percentiles to estimates. */
+    include_quantiles?: boolean;
+    /** Returns `state_text`, the text the answer `span`s refer to. */
+    return_state_text?: boolean;
+  };
+  /** Images under reference names. Send this or `images`, not both. Up to 16. */
+  assets?: Record<string, KenariSystemOneImageAsset>;
+  /** Images in array order, for models that take this shape. */
+  images?: KenariSystemOneMedia[];
+  /** Up to 4 clips of 8 MiB each, for models that read audio. */
+  audio?: KenariSystemOneMedia[];
+  /** Up to 2 videos of 16 MiB each, for models that read video. */
+  videos?: KenariSystemOneMedia[];
+  apiKey?: string;
+  signal?: AbortSignal;
+}
+
+/** Base of every answer: Clairic fields and all four question types share these. */
+export interface KenariSystemOneAnswerBase {
+  /** The field's or question's type. */
+  type: KenariSystemOneQuestionType | KenariSystemOneFieldType;
+  /** How sure the model is of the answer. */
+  confidence?: number;
+}
+
+/** An answered `noul` question: the probability that the answer is "yes". */
+export interface KenariSystemOneNoulAnswer extends KenariSystemOneAnswerBase {
+  type: "noul";
+  noul: number;
+}
+
+/** An answered `choice` question. */
+export interface KenariSystemOneChoiceAnswer extends KenariSystemOneAnswerBase {
+  type: "choice";
+  /** The chosen option key. */
+  choice: string;
+  probabilities?: Record<string, number>;
+}
+
+/** An answered `score` question. */
+export interface KenariSystemOneScoreAnswer extends KenariSystemOneAnswerBase {
+  type: "score";
+  score: number;
+  /** Maps rubric positions to their labels. */
+  legend?: Record<string, string>;
+  probabilities?: Record<string, number>;
+}
+
+/** An answered `box` question. Edges are fractions of the image, from 0 to 1. */
+export interface KenariSystemOneBoxAnswer extends KenariSystemOneAnswerBase {
+  type: "box";
+  box: { top: number; bottom: number; left: number; right: number };
+}
+
+/** A Clairic extracted field. */
+export interface KenariSystemOneFieldAnswer extends KenariSystemOneAnswerBase {
+  /** The answer, or `null` when the input does not determine it. */
+  value: string | number | unknown[] | null;
+  /** The best candidate; stays present when `value` is `null`. */
+  guess?: string | number | unknown[] | null;
+  /** Probability that the input does not determine the value. */
+  p_null?: number;
+  /** For a `text` field: start and end of `guess` in the read text. */
+  span?: [number, number];
+  /** For a `list` field: one span per item. */
+  spans?: Array<[number, number]>;
+  /** For an `estimate` field. */
+  median?: number;
+  p10?: number;
+  p90?: number;
+}
+
+export type KenariSystemOneAnswer =
+  | KenariSystemOneNoulAnswer
+  | KenariSystemOneChoiceAnswer
+  | KenariSystemOneScoreAnswer
+  | KenariSystemOneBoxAnswer
+  | KenariSystemOneFieldAnswer;
+
+export interface KenariSystemOneResponse {
+  /** The versioned id that answered, falling back to the id you requested. */
+  model: string;
+  /** One entry per question id, or one per field name for a `fields` call. */
+  answers: Record<string, KenariSystemOneAnswer>;
+  /** Clairic only: `true` when the state was cut to fit the model. */
+  truncated?: boolean;
+  /** Present when `options.return_state_text` is true. */
+  state_text?: string;
+  usage: { input_tokens: number; output_tokens: number };
+}
+
+// =============================================================================
 // Audio, music, and video types
 // =============================================================================
 
