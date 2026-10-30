@@ -15,7 +15,7 @@ kenari is an LLM gateway — one base URL (`https://kenari.id/v1`) speaks both t
 - **Moderations** — `POST /v1/moderations` (OpenAI Moderations-compatible)
 - **System One** — `POST /v1/systemone` for typed questions (noul, choice, score, box) and Clairic field extraction
 - **Specialized model discovery** — `GET /v1/models?modality=` for `embedding`, `rerank`, `moderation` and `systemone` models
-- **Audio / Music / Video** — generation endpoints for models that support them
+- **Web search / fetch / X search** — `POST /v1/web/search`, `/v1/web/fetch` and `/v1/x/search`
 - **API key auth** — via `KENARI_API_KEY` env var or `/login kenari` (stored in `~/.pi/agent/auth.json`)
 
 ## Installation
@@ -90,6 +90,23 @@ Fetch models filtered by modality — `embedding`, `rerank`, `moderation` or `sy
 
 Generate images via `POST /v1/images/generations`.
 
+Images come back base64-encoded in `data[]`, as `b64_json` or as a `data:` URI in `url`. kenari reports failures as `{ error: { message } }`, so the thrown error carries that message rather than the raw body.
+
+### `generateImageBytes(options: KenariImageGenerateOptions): Promise<KenariImageAsset[]>`
+
+The same call, decoded: returns `{ bytes, mimeType, revisedPrompt? }` per image, preferring `b64_json` and falling back to a `data:` URI. `decodeImage(data)` is exported for when you already have the response.
+
+```ts
+const [image] = await generateImageBytes({
+  apiKey,
+  model: "gpt-image-2",
+  prompt: "a red panda writing code",
+  n: 1,
+  size: "1024x1024",
+});
+await writeFile("image.png", image.bytes);
+```
+
 ### `createEmbeddings(options: KenariEmbeddingOptions): Promise<KenariEmbeddingResponse>`
 
 Create embeddings via `POST /v1/embeddings`.
@@ -133,17 +150,36 @@ const invoice = await runSystemOne({
 
 Answers carry `confidence`; Clairic fields also carry `guess`, `p_null` and, for text, the `span` of the guess in the read text. Use `reference_date` to anchor dates written without a year, and `options.return_state_text` to get back the text the spans refer to.
 
-### `generateAudio(options: KenariAudioOptions): Promise<ArrayBuffer>`
+### `webSearch(options: KenariWebSearchOptions): Promise<KenariWebSearchResponse>`
 
-Generate audio (TTS) via `POST /v1/audio/speech`.
+Search the web via `POST /v1/web/search` — `{ query, max_results? }`, with kenari defaulting `max_results` to 5. Returns `results[]` of `{ title, url, content }` alongside kenari's `id` and `cost_micro_idr`.
 
-### `generateMusic(options: KenariMusicOptions): Promise<ArrayBuffer>`
+```ts
+const { results } = await webSearch({
+  apiKey,
+  query: "latest stable Rust release",
+  max_results: 5,
+});
+```
 
-Generate music via `POST /v1/music/generations` (lyrics or instrumental+prompt). Returns the decoded mp3 bytes.
+### `webFetch(options: KenariWebFetchOptions): Promise<KenariWebFetchResponse>`
 
-### `generateVideo(options: KenariVideoOptions): Promise<ArrayBuffer>`
+Read one page via `POST /v1/web/fetch` — `{ url }` in, `{ title, content, links }` out, with the content already extracted from the HTML.
 
-Generate video via the async endpoints: `POST /v1/videos/generations`, poll `GET /v1/videos/{id}`, download `GET /v1/videos/{id}/content`. Returns the clip bytes. `createVideoJob`/`pollVideoJob` are exported for manual control.
+### `xSearch(options: KenariXSearchOptions): Promise<KenariXSearchResponse>`
+
+Answer a question from X posts via `POST /v1/x/search` — `{ query, x_search_filter? }` in, `{ answer, citations }` out. The filter narrows the corpus with `from_date` / `to_date` and `allowed_x_handles` / `excluded_x_handles`:
+
+```ts
+const { answer, citations } = await xSearch({
+  apiKey,
+  query: "reactions to the latest Rust release",
+  x_search_filter: { from_date: "2026-01-01", allowed_x_handles: ["rustlang"] },
+});
+```
+
+The web and X endpoints are kenari's own, not [OI] shapes, and none of them need a model id — so they never show up in `GET /v1/models`.
+
 ## Development
 
 ```bash

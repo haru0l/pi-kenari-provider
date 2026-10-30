@@ -96,14 +96,41 @@ export interface KenariImageGenerateOptions {
     style?: "natural" | "vivid";
     background?: "opaque" | "auto";
     response_format?: "url" | "b64_json";
+    /**
+     * Abort the request after this many milliseconds. Image models are slow;
+     * kenari's own examples allow 300000.
+     */
+    timeoutMs?: number;
     apiKey?: string;
     signal?: AbortSignal;
 }
+/** One image in a `/v1/images/generations` response. */
+export interface KenariImageData {
+    /** The image as base64, when the model returns it inline. */
+    b64_json?: string;
+    /**
+     * A self-contained `data:` URI holding the image — not a link to a hosted
+     * file. Read the part after the comma and decode it.
+     */
+    url?: string;
+    /** The prompt the model actually used, when it reports one. */
+    revised_prompt?: string;
+}
 export interface KenariImageResponse {
-    data: Array<{
-        url?: string;
-        b64_json?: string;
-    }>;
+    created?: number;
+    /** One entry per requested image. Each carries `b64_json`, `url`, or both. */
+    data: KenariImageData[];
+    usage?: Record<string, unknown>;
+    size?: string;
+    quality?: string;
+    output_format?: string;
+}
+/** A decoded image: the bytes plus the type the response declared. */
+export interface KenariImageResult {
+    bytes: Uint8Array;
+    /** From the `data:` URI, or `image/png` when only `b64_json` was returned. */
+    mimeType: string;
+    revisedPrompt?: string;
 }
 export interface KenariEmbeddingOptions {
     input: string | string[];
@@ -286,47 +313,73 @@ export interface KenariSystemOneResponse {
         output_tokens: number;
     };
 }
-/** Text-to-speech via POST /v1/audio/speech. Returns raw audio bytes. */
-export interface KenariAudioOptions {
-    model: string;
-    /** Text to speak. */
-    input: string;
-    voice?: string;
-    response_format?: "mp3" | "wav" | "pcm" | "opus" | "aac" | "flac";
-    speed?: number;
-    language?: string;
+/** Fields every web/X response carries alongside its payload. */
+export interface KenariWebMeta {
+    /** Identifies the request. */
+    id?: string;
+    cost_micro_idr?: number;
+}
+export interface KenariWebSearchOptions {
+    /** The search query. It must not be empty. */
+    query: string;
+    /**
+     * How many results to return. Defaults to 5. A value outside 1 to 10 is
+     * moved to the nearest limit, not rejected; kenari fails to parse a negative
+     * value or one above 255.
+     */
+    max_results?: number;
     apiKey?: string;
     signal?: AbortSignal;
 }
-/** Music generation via POST /v1/music/generations. Returns decoded mp3 bytes. */
-export interface KenariMusicOptions {
-    model: string;
-    /** The words to be sung. Required unless instrumental. */
-    lyrics?: string;
-    /** Produce a track with no vocals; requires prompt. */
-    instrumental?: boolean;
-    /** Style/mood description; required when instrumental is true. */
-    prompt?: string;
+export interface KenariWebSearchResult {
+    title: string;
+    url: string;
+    /** A snippet of the page. */
+    content: string;
+}
+export interface KenariWebSearchResponse extends KenariWebMeta {
+    results: KenariWebSearchResult[];
+}
+export interface KenariWebFetchOptions {
+    /** Must start with `http://` or `https://` and point to a public host. */
+    url: string;
     apiKey?: string;
     signal?: AbortSignal;
 }
-/** Async video job via /v1/videos/*. Returns the decoded clip bytes. */
-export interface KenariVideoOptions {
-    model: string;
-    prompt: string;
-    duration?: number;
-    resolution?: string;
-    pollIntervalMs?: number;
-    timeoutMs?: number;
+export interface KenariWebFetchResponse extends KenariWebMeta {
+    title?: string;
+    /** The page as plain text. */
+    content: string;
+    /** The URLs found on the page. */
+    links?: string[];
+}
+export interface KenariXSearchFilter {
+    /** Search only these accounts. At most 20. Cannot be combined with `excluded_x_handles`. */
+    allowed_x_handles?: string[];
+    /** Leave these accounts out. At most 20. */
+    excluded_x_handles?: string[];
+    /** Start of the date range, `YYYY-MM-DD`. */
+    from_date?: string;
+    /** End of the date range, `YYYY-MM-DD`. Must not be before `from_date`. */
+    to_date?: string;
+    /** Read the images inside posts. */
+    enable_image_understanding?: boolean;
+    /** Read the videos inside posts. */
+    enable_video_understanding?: boolean;
+}
+export interface KenariXSearchOptions {
+    query: string;
+    /** Narrows the search. Unknown fields are refused by kenari. */
+    x_search_filter?: KenariXSearchFilter;
     apiKey?: string;
     signal?: AbortSignal;
 }
-/** Job object returned by POST /v1/videos/generations and GET /v1/videos/{id}. */
-export interface KenariVideoJob {
-    id: string;
-    object?: "video.job";
-    status: "rendering" | "done" | "failed" | "expired";
-    model?: string;
-    url?: string;
+export interface KenariXSearchResponse extends KenariWebMeta {
+    answer: string;
+    /** Posts the answer draws on. */
+    citations: Array<{
+        url: string;
+        title: string | null;
+    }>;
 }
 //# sourceMappingURL=types.d.ts.map

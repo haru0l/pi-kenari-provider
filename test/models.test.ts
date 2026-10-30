@@ -89,13 +89,13 @@ describe("toKenariModel", () => {
         ...sample,
         id: "x",
         pricing: { ...sample.pricing, free: true },
-      })!.isFree,
+      })?.isFree,
     ).toBe(true);
   });
 
   it("keeps text-only input for text models and skips id-less entries", () => {
     expect(
-      toKenariModel({ ...sample, modalities: { input: ["text"] } })!.input,
+      toKenariModel({ ...sample, modalities: { input: ["text"] } })?.input,
     ).toEqual(["text"]);
     expect(toKenariModel({ ...sample, id: "" })).toBeNull();
   });
@@ -105,7 +105,7 @@ describe("toKenariModels", () => {
   it("converts a catalog and drops nothing valid", () => {
     const models = toKenariModels([sample, { id: "bge-m3" }]);
     expect(models).toHaveLength(2);
-    expect(models[1]!.name).toBe("bge-m3");
+    expect(models[1]?.name).toBe("bge-m3");
   });
 });
 
@@ -113,8 +113,8 @@ describe("kenari-free route", () => {
   it("is in the baseline catalog and costs nothing", () => {
     const route = KENARI_BASELINE_MODELS.find((m) => m.id === "kenari-free");
     expect(route).toBeDefined();
-    expect(route!.isFree).toBe(true);
-    expect(route!.cost.input).toBe(0);
+    expect(route?.isFree).toBe(true);
+    expect(route?.cost.input).toBe(0);
   });
 });
 

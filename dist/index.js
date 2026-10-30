@@ -11,12 +11,12 @@
  *  - OpenAI-completions wire format (kenari is an OpenAI drop-in)
  *  - :free model variants (no balance deducted)
  *  - Image generation, embeddings, rerank, moderations, system one
- *  - Audio, music, and video generation
+ *  - Web and X search (POST /v1/web/search, /v1/web/fetch, /v1/x/search)
  *  - API key auth via KENARI_API_KEY env var or /login kenari
  */
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { BASE_URL_KENARI, PROVIDER_KENARI } from "./constants.js";
-import { fetchKenariModels, getKenariBaselineModels, refreshKenariModels, } from "./models.js";
+import { getKenariBaselineModels, refreshKenariModels } from "./models.js";
 let compatPromise;
 /** Single-flight dynamic import; failures are not cached so a later stream can retry. */
 function loadPiAiCompat() {
@@ -137,12 +137,12 @@ export default function (pi) {
         },
     });
 }
-export { createVideoJob, generateAudio, generateMusic, generateVideo, pollVideoJob, } from "./api/audio.js";
 export { createEmbeddings } from "./api/embeddings.js";
-export { generateImages } from "./api/images.js";
+export { decodeImage, generateImageBytes, generateImages, } from "./api/images.js";
 export { moderateContent } from "./api/moderations.js";
 export { rerankDocuments } from "./api/rerank.js";
 export { runSystemOne } from "./api/systemone.js";
+export { webFetch, webSearch, xSearch } from "./api/web.js";
 // Re-export for programmatic use.
 export { fetchKenariModels, fetchKenariModelsByModality, refreshKenariModels, toKenariModels, } from "./models.js";
 export { KENARI_MODALITIES } from "./types.js";
