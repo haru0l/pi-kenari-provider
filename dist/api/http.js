@@ -22,6 +22,17 @@ export async function kenariErrorMessage(response) {
     }
     return text;
 }
+/** Pull a message out of an `error` value that arrived with a 200 status. */
+export function errorMessage(error) {
+    if (typeof error === "string" && error)
+        return error;
+    if (error && typeof error === "object" && "message" in error) {
+        const message = error.message;
+        if (typeof message === "string" && message)
+            return message;
+    }
+    return JSON.stringify(error).slice(0, 400);
+}
 /** Throw kenari's own message for a failed response. */
 export async function throwKenariError(label, response) {
     const message = await kenariErrorMessage(response);

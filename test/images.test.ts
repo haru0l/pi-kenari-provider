@@ -67,6 +67,16 @@ describe("generateImages", () => {
     ).rejects.toThrow(/image generation failed \(504\): upstream timeout/);
   });
 
+  it("throws kenari's message when a 200 body carries error instead of data", async () => {
+    stubFetch({
+      error: { message: "all_providers_failed", code: "all_providers_failed" },
+    });
+
+    await expect(
+      generateImages({ apiKey: "kn-test", model: "gpt-image-2", prompt: "x" }),
+    ).rejects.toThrow(/image generation failed: all_providers_failed/);
+  });
+
   it("requires an api key", async () => {
     await expect(
       generateImages({ model: "gpt-image-2", prompt: "x" }),
@@ -149,5 +159,38 @@ describe("generateImageBytes", () => {
     expect(Array.from(first?.bytes ?? [])).toEqual([1, 2]);
     expect(Array.from(second?.bytes ?? [])).toEqual([3, 4]);
     expect(second?.mimeType).toBe("image/jpeg");
+  });
+
+  it("downloads an image when a model returns a hosted url", async () => {
+    const bytes = new Uint8Array([9, 8, 7]);
+    const fetchMock = vi.fn(async (url: string) =>
+      url.endsWith("/images/generations")
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [{ url: "https://cdn.example/a.webp" }],
+            }),
+            text: async () => "",
+          }
+        : {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-type": "image/webp" }),
+            arrayBuffer: async () => bytes.buffer,
+          },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [result] = await generateImageBytes({
+      apiKey: "kn-test",
+      model: "agnes-image-2-5-flash:free",
+      prompt: "a hosted image",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://cdn.example/a.webp");
+    expect(Array.from(result?.bytes ?? [])).toEqual([9, 8, 7]);
+    expect(result?.mimeType).toBe("image/webp");
   });
 });

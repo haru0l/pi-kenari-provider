@@ -8,6 +8,8 @@
  * fall back to the raw body when it is some other shape.
  */
 export declare function kenariErrorMessage(response: Response): Promise<string>;
+/** Pull a message out of an `error` value that arrived with a 200 status. */
+export declare function errorMessage(error: unknown): string;
 /** Throw kenari's own message for a failed response. */
 export declare function throwKenariError(label: string, response: Response): Promise<never>;
 /**

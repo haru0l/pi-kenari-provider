@@ -109,8 +109,9 @@ export interface KenariImageData {
     /** The image as base64, when the model returns it inline. */
     b64_json?: string;
     /**
-     * A self-contained `data:` URI holding the image — not a link to a hosted
-     * file. Read the part after the comma and decode it.
+     * Normally a self-contained `data:` URI holding the image — read the part
+     * after the comma and decode it. Some models return a plain https link
+     * instead, which `generateImageBytes` downloads for you.
      */
     url?: string;
     /** The prompt the model actually used, when it reports one. */
@@ -124,6 +125,13 @@ export interface KenariImageResponse {
     size?: string;
     quality?: string;
     output_format?: string;
+    /**
+     * A failure kenari reports after the 45s "long-running" handshake: the
+     * response keeps its 200 status but carries this instead of usable images.
+     */
+    error?: {
+        message?: string;
+    } | string;
 }
 /** A decoded image: the bytes plus the type the response declared. */
 export interface KenariImageResult {
