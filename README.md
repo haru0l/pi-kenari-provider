@@ -15,7 +15,7 @@ kenari is an LLM gateway — one base URL (`https://kenari.id/v1`) speaks both t
 - **Moderations** — `POST /v1/moderations` (OpenAI Moderations-compatible)
 - **System One** — `POST /v1/systemone` for typed questions (noul, choice, score, box) and Clairic field extraction
 - **System One classifiers** — registers every questions-capable System One model as a pi classifier, callable from codemode (`models.classify`) and extensions, deliberately kept out of `/model`
-- **`system_one` tool + `system-one` skill** — the bundled skill routes decisions, image questions and field extraction to the tool, which defaults by request shape (`clef:free`, or `clairic:free` for `fields`) and lists the live catalog on `action: "models"`
+- **`system_one` tool + `system-one` skill** — the bundled skill routes decisions, image questions and field extraction to the tool, which defaults free-first (`clef:free`, then `clef-flash:free`, then any other free model; `clairic:free` for `fields`) and only spends on a paid model when no free one can answer. Lists the live catalog on `action: "models"`
 - **`generate_image` tool** — draws with kenari image models, renders the picture inline in the conversation, and saves the same bytes into the working directory
 - **Specialized model discovery** — `GET /v1/models?modality=` for `embedding`, `rerank`, `moderation` and `systemone` models
 - **Web search / fetch / X search** — `POST /v1/web/search`, `/v1/web/fetch` and `/v1/x/search`
@@ -93,7 +93,7 @@ Extensions use `ctx.modelRegistry.classify()` with the same context shape.
 
 **From chat** — the extension registers a `system_one` tool and ships the `system-one` skill that tells the model when to call it. The tool also reaches what the classifier interface cannot express: `box` questions (locate something in an image), Clairic `fields` extraction, audio/video state, and `reference_date` anchoring.
 
-**Choosing a model** — omit `model` and the tool picks by request shape (`clef:free` for questions, `clairic:free` for `fields`, an image-capable model when `assets` are sent). To see the live catalog with prices and capabilities:
+**Choosing a model** — omit `model` and the tool picks free-first: `clef:free`, then `clef-flash:free`, then any other free model that fits (`clairic:free` for `fields`, an image-capable free model when `assets` are sent). A paid model is used only when no free model can answer, so the default never quietly bills you. An explicit `model` is always honored and priced. To see the live catalog with prices and capabilities:
 
 ```json
 { "action": "models" }

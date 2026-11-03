@@ -95,17 +95,41 @@ export function nearestSystemOneModelIds(raw, catalog, limit = 3) {
         .slice(0, limit)
         .map((scored) => scored.id);
 }
-/** The model a request runs on when it names none. */
+/**
+ * Ids the default prefers, in order. `clef:free` is the house default and
+ * `clef-flash:free` is its free sibling; a `fields` request has only Clairic.
+ * A catalog that has moved or dropped these still falls through below.
+ */
+const PREFERRED_DEFAULTS = {
+    questions: ["clef:free", "clef-flash:free"],
+    fields: ["clairic:free"],
+};
+/**
+ * The model a request runs on when it names none.
+ *
+ * Free first, always: every model here answers the same wire contract, so a
+ * default that can silently bill a paid model is a trap. The order is the
+ * house default, then any other free model that fits, and only then a paid
+ * one — which happens only when the catalog carries no free model for this
+ * request shape at all.
+ */
 export function defaultSystemOneModel(need, catalog = getKenariSystemOneModelCatalog()) {
-    const preferred = need.fields ? "clairic:free" : "clef:free";
-    const exact = catalog.find((m) => m.id === preferred);
-    if (exact && fits(exact, need))
-        return exact;
-    // A catalog without the preferred id (or one that moved it) still has to
-    // run the request, so take the first model that can.
-    const fallback = catalog.find((m) => fits(m, need));
-    if (fallback)
-        return fallback;
+    const preferred = PREFERRED_DEFAULTS[need.fields ? "fields" : "questions"];
+    for (const id of preferred) {
+        const exact = catalog.find((m) => m.id === id);
+        if (exact && fits(exact, need))
+            return exact;
+    }
+    // Any free model that fits beats every paid one: `clef-omni:free`, for
+    // instance, reads images that the paid text-only `clef` cannot, at no cost.
+    const free = catalog.find((m) => m.isFree && fits(m, need));
+    if (free)
+        return free;
+    // Nothing free can answer, so spend rather than fail: a catalog listing only
+    // paid models (or a plan with no free tier) still has to run the request.
+    const paid = catalog.find((m) => fits(m, need));
+    if (paid)
+        return paid;
     throw new Error(`system_one: no System One model in the catalog can answer this request (${need.fields ? "fields" : "questions"}${need.images ? ", with images" : ""}).`);
 }
 /** Reject a model that exists but cannot answer what was asked of it. */

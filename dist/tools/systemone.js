@@ -45,7 +45,7 @@ export const systemOneParams = Type.Object({
     question: Type.Optional(Type.Any()),
     queries: Type.Optional(Type.Any()),
     model: Type.Optional(Type.String({
-        description: 'Which System One model judges the request. Omit it and the tool picks by request shape: clef:free for questions, clairic:free for fields, an image-capable model when assets are sent. Call action: "models" for the current list, prices and capabilities; an unknown or unsuitable id is rejected with what fits.',
+        description: 'Which System One model judges the request. Omit it and the tool picks free-first: clef:free, then clef-flash:free, then any other free model that fits (clairic:free for fields, an image-capable free model when assets are sent) — a paid model is used only when no free model can answer. Call action: "models" for the current list, prices and capabilities; an unknown or unsuitable id is rejected with what fits.',
     })),
     fields: Type.Optional(Type.Any({
         description: 'Clairic extraction: a name-keyed map of fields to read out of the state, e.g. {"total": {"type": "number", "unit": "IDR"}}. Send this or questions, not both. Field types: text, number, date, time, datetime, duration, list, estimate, forecast.',
@@ -1272,7 +1272,7 @@ export const systemOneTool = {
         "score criteria is an ordered array of at least two levels, " +
         'box takes no criteria and needs an image under "assets". ' +
         'Clairic models extract structured data instead: send "fields" with typed entries (text, number, date, list, estimate, ...). ' +
-        'Images travel under reference names in "assets" - cite the name in instructions. Models: clef:free (default), clef-flash:free, clef-omni:free, clef, jev-1-13, jev-1-14; clairic:free handles fields.',
+        'Images travel under reference names in "assets" - cite the name in instructions. Models: clef:free (default), clef-flash:free, clef-omni:free, clef, jev-1-13, jev-1-14; clairic:free handles fields. Omitting model is free-first: clef:free, then clef-flash:free, then the other free models, and only then a paid one.',
     parameters: systemOneParams,
     outputSchema: systemOneOutput,
     promptSnippet: "Use system_one for bounded judgments over supplied evidence, including classification, routing, and selecting among plausible tools, skills, strategies, implementations, models, or providers",

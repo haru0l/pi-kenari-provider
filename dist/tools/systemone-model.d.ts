@@ -37,7 +37,15 @@ export declare function findSystemOneModelInfo(raw: string, catalog: readonly Ke
  * comes back here as a suggestion instead.
  */
 export declare function nearestSystemOneModelIds(raw: string, catalog: readonly KenariSystemOneModelInfo[], limit?: number): string[];
-/** The model a request runs on when it names none. */
+/**
+ * The model a request runs on when it names none.
+ *
+ * Free first, always: every model here answers the same wire contract, so a
+ * default that can silently bill a paid model is a trap. The order is the
+ * house default, then any other free model that fits, and only then a paid
+ * one — which happens only when the catalog carries no free model for this
+ * request shape at all.
+ */
 export declare function defaultSystemOneModel(need: SystemOneModelNeed, catalog?: readonly KenariSystemOneModelInfo[]): KenariSystemOneModelInfo;
 /**
  * The model a request runs on: the id it named (normalized, alias-resolved and

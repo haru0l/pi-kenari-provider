@@ -382,6 +382,52 @@ describe("system_one model choice", () => {
     expect(resolveSystemOneModel(undefined, need()).id).toBe("clef:free");
   });
 
+  it("falls back to clef-flash:free when clef:free is not in the catalog", () => {
+    const withoutClefFree = catalog.filter((m) => m.id !== "clef:free");
+    expect(resolveSystemOneModel(undefined, need(), withoutClefFree).id).toBe(
+      "clef-flash:free",
+    );
+  });
+
+  it("prefers a free model over a paid one when both fit", () => {
+    // `clef` is paid, text-only and listed first; `clef-omni:free` answers the
+    // same questions for nothing, so the default must not fall through to it.
+    const paidFirst = catalog
+      .filter((m) => m.id !== "clef:free" && m.id !== "clef-flash:free")
+      .sort((a, b) => Number(a.isFree) - Number(b.isFree));
+    expect(paidFirst[0]?.id).toBe("clef");
+    expect(resolveSystemOneModel(undefined, need(), paidFirst).id).toBe(
+      "clef-omni:free",
+    );
+  });
+
+  it("takes a paid model only when no free model can answer", () => {
+    const paidOnly = [
+      {
+        id: "clef",
+        name: "Clef",
+        isFree: false,
+        input: ["text"],
+        capabilities: ["questions"] as const,
+        inputMicroIdr: 3_000_000_000,
+      },
+    ];
+    expect(resolveSystemOneModel(undefined, need(), paidOnly as never).id).toBe(
+      "clef",
+    );
+  });
+
+  it("keeps an image default free when the free image model exists", () => {
+    const withoutClefFree = catalog.filter((m) => m.id !== "clef:free");
+    const resolved = resolveSystemOneModel(
+      undefined,
+      { fields: false, images: true },
+      withoutClefFree,
+    );
+    expect(resolved.info.isFree).toBe(true);
+    expect(resolved.info.input).toContain("image");
+  });
+
   it("defaults an image request to an image-capable model", () => {
     const resolved = resolveSystemOneModel(undefined, {
       fields: false,

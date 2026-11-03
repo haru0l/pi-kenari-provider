@@ -125,9 +125,11 @@ the input really does not contain the field.
 
 ## Choose the model
 
-Omit `model` and the tool picks by request shape: `clef:free` for questions,
-`clairic:free` for `fields`, and an image-capable model when you send `assets`.
-That is the right choice most of the time.
+Omit `model` and the tool picks free-first: `clef:free`, then `clef-flash:free`,
+then any other free model that fits (`clairic:free` for `fields`, an
+image-capable free model when you send `assets`). A **paid** model is chosen
+only when no free model can answer the request at all — the default never
+spends when it does not have to.
 
 To see what exists right now, with prices and capabilities:
 
@@ -142,7 +144,7 @@ Ask for a model explicitly when you have a reason:
 
 | Situation | Model |
 | --- | --- |
-| Default for questions | `clef:free` |
+| Default for questions (omit `model`) | `clef:free`, else `clef-flash:free`, else any free model |
 | Bulk triage where speed beats accuracy | `clef-flash:free` |
 | A free answer came back genuinely ambiguous, or the call is high-stakes | `jev-1-14` |
 | `fields` extraction | `clairic:free` |
